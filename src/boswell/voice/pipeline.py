@@ -84,6 +84,11 @@ async def create_pipeline(
         api_key=config.elevenlabs_api_key,
         voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel - professional female voice
         model="eleven_turbo_v2",  # Fast model for low latency
+        voice_settings={
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+            "speed": 1.15,  # 15% faster speech
+        },
     )
 
     # Set up LLM with Claude
