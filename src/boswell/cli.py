@@ -2,6 +2,14 @@
 
 import typer
 
+from boswell.config import (
+    BoswellConfig,
+    get_config_path,
+    load_config,
+    save_config,
+    validate_api_keys,
+)
+
 app = typer.Typer(
     name="boswell",
     help="AI Research Interviewer - Conduct research-informed interviews autonomously",
@@ -9,10 +17,126 @@ app = typer.Typer(
 )
 
 
+def _prompt_api_key(name: str, current_value: str, required: bool = True) -> str:
+    """Prompt for an API key with optional/required indicator.
+
+    Args:
+        name: Human-readable name of the API key.
+        current_value: Current value (shown as masked if set).
+        required: Whether this key is required.
+
+    Returns:
+        The entered API key, or current value if empty input.
+    """
+    status = "[required]" if required else "[optional]"
+    if current_value:
+        # Show masked version of current key
+        if len(current_value) > 8:
+            masked = current_value[:4] + "..." + current_value[-4:]
+        else:
+            masked = "***"
+        prompt_text = f"{name} {status} (current: {masked})"
+    else:
+        prompt_text = f"{name} {status}"
+
+    value = typer.prompt(prompt_text, default="", show_default=False)
+    # If user entered empty, keep current value
+    return value if value else current_value
+
+
 @app.command()
 def init() -> None:
     """Initialize Boswell configuration with API keys."""
-    typer.echo("Boswell init - Not yet implemented")
+    typer.echo("Boswell Configuration Setup")
+    typer.echo("=" * 40)
+    typer.echo()
+
+    # Load existing config if present
+    existing_config = load_config()
+    if existing_config:
+        typer.echo(f"Existing config found at {get_config_path()}")
+        typer.echo("Press Enter to keep current values, or enter new values.")
+        typer.echo()
+    else:
+        existing_config = BoswellConfig()
+        typer.echo("No existing config found. Creating new configuration.")
+        typer.echo("Press Enter to skip optional fields.")
+        typer.echo()
+
+    # Prompt for API keys
+    typer.echo("API Keys:")
+    typer.echo("-" * 20)
+
+    claude_key = _prompt_api_key(
+        "Claude API Key", existing_config.claude_api_key, required=True
+    )
+    elevenlabs_key = _prompt_api_key(
+        "ElevenLabs API Key", existing_config.elevenlabs_api_key, required=True
+    )
+    deepgram_key = _prompt_api_key(
+        "Deepgram API Key", existing_config.deepgram_api_key, required=True
+    )
+    meetingbaas_key = _prompt_api_key(
+        "MeetingBaaS API Key", existing_config.meetingbaas_api_key, required=True
+    )
+
+    typer.echo()
+    typer.echo("Settings:")
+    typer.echo("-" * 20)
+
+    # Meeting provider selection
+    meeting_provider = typer.prompt(
+        "Meeting provider (google_meet/zoom)",
+        default=existing_config.meeting_provider,
+    )
+
+    # Interview time settings
+    target_time = typer.prompt(
+        "Default target interview time (minutes)",
+        default=existing_config.default_target_time,
+        type=int,
+    )
+
+    max_time = typer.prompt(
+        "Default max interview time (minutes)",
+        default=existing_config.default_max_time,
+        type=int,
+    )
+
+    # Create and save config
+    config = BoswellConfig(
+        claude_api_key=claude_key,
+        elevenlabs_api_key=elevenlabs_key,
+        deepgram_api_key=deepgram_key,
+        meetingbaas_api_key=meetingbaas_key,
+        meeting_provider=meeting_provider,
+        default_target_time=target_time,
+        default_max_time=max_time,
+    )
+
+    save_config(config)
+
+    typer.echo()
+    typer.echo("=" * 40)
+    typer.echo(f"Configuration saved to {get_config_path()}")
+
+    # Show validation status
+    key_status = validate_api_keys(config)
+    typer.echo()
+    typer.echo("API Key Status:")
+    for key_name, is_set in key_status.items():
+        status_icon = "[set]" if is_set else "[not set]"
+        typer.echo(f"  {key_name}: {status_icon}")
+
+    # Warn about missing required keys
+    missing_required = [k for k, v in key_status.items() if not v]
+    if missing_required:
+        typer.echo()
+        typer.secho(
+            "Warning: Some API keys are not set. You may need to configure them "
+            "before running interviews.",
+            fg=typer.colors.YELLOW,
+        )
 
 
 @app.command()
