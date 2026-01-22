@@ -82,10 +82,11 @@ class TestHTMLTextExtractor:
     def test_skip_script_tags(self) -> None:
         """Test that script content is skipped."""
         extractor = HTMLTextExtractor()
-        extractor.feed("<p>Visible</p><script>console.log('hidden');</script><p>Also visible</p>")
+        html = "<p>Visible</p><script>console.log('hidden');</script><p>Also</p>"
+        extractor.feed(html)
         text = extractor.get_text()
         assert "Visible" in text
-        assert "Also visible" in text
+        assert "Also" in text
         assert "console.log" not in text
 
     def test_skip_style_tags(self) -> None:
@@ -375,7 +376,7 @@ class TestGenerateQuestions:
 
         with patch("boswell.ingestion.load_config", return_value=mock_config):
             with patch("anthropic.Anthropic", return_value=mock_client):
-                questions = generate_questions("AI Research", "Some research content", 5)
+                questions = generate_questions("AI Research", "Research", 5)
 
                 assert len(questions) == 5
                 assert "What is your background in this field?" in questions

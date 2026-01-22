@@ -392,7 +392,7 @@ async def wait_for_guest(
         interview_id: The interview ID to monitor.
         timeout_minutes: Maximum time to wait in minutes (default: 10).
         poll_interval_seconds: Interval between status checks (default: 30).
-        progress_callback: Optional callback function(elapsed_seconds, remaining_seconds)
+        progress_callback: Optional callback(elapsed_seconds, remaining_seconds)
             called after each poll to report progress.
 
     Returns:
@@ -462,7 +462,7 @@ def wait_for_guest_sync(
         interview_id: The interview ID to monitor.
         timeout_minutes: Maximum time to wait in minutes (default: 10).
         poll_interval_seconds: Interval between status checks (default: 30).
-        progress_callback: Optional callback function(elapsed_seconds, remaining_seconds).
+        progress_callback: Optional callback(elapsed_seconds, remaining_seconds).
 
     Returns:
         True if guest joined within timeout, False if timeout expired.

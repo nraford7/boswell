@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,10 +11,10 @@ import pytest
 from boswell.config import BoswellConfig
 from boswell.interview import Interview, InterviewStatus
 from boswell.meeting import (
-    MeetingBaaSClient,
-    MeetingBaaSError,
     NO_SHOW_TIMEOUT_MINUTES,
     POLL_INTERVAL_SECONDS,
+    MeetingBaaSClient,
+    MeetingBaaSError,
     check_guest_joined,
     create_interview_bot,
     generate_meeting_url,

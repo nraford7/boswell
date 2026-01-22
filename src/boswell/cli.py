@@ -395,7 +395,9 @@ def wait(
         raise typer.Exit(1)
 
     if interview.status == InterviewStatus.IN_PROGRESS:
-        typer.secho("Guest already joined! Interview is in progress.", fg=typer.colors.GREEN)
+        typer.secho(
+            "Guest already joined! Interview is in progress.", fg=typer.colors.GREEN
+        )
         return
 
     if interview.status == InterviewStatus.COMPLETE:
@@ -439,7 +441,9 @@ def wait(
 
         typer.echo()
         if guest_joined:
-            typer.secho("Guest joined! Interview is now IN_PROGRESS.", fg=typer.colors.GREEN)
+            typer.secho(
+                "Guest joined! Interview is now IN_PROGRESS.", fg=typer.colors.GREEN
+            )
             typer.echo(f"Check status: boswell status {interview_id}")
         else:
             # Handle no-show
@@ -462,7 +466,9 @@ def wait(
     except KeyboardInterrupt:
         typer.echo()
         typer.secho("Wait cancelled by user.", fg=typer.colors.YELLOW)
-        typer.echo(f"Interview status unchanged. Check with: boswell status {interview_id}")
+        typer.echo(
+            f"Interview status unchanged. Check with: boswell status {interview_id}"
+        )
         raise typer.Exit(0)
     except MeetingBaaSError as e:
         typer.secho(f"MeetingBaaS error: {e}", fg=typer.colors.RED)
