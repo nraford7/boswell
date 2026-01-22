@@ -9,6 +9,8 @@ from boswell.config import (
     save_config,
     validate_api_keys,
 )
+from boswell.interview import InterviewStatus, load_interview
+from boswell.interview import list_interviews as get_all_interviews
 
 app = typer.Typer(
     name="boswell",
@@ -153,8 +155,55 @@ def create(
 @app.command()
 def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
     """Check the status of an interview."""
-    typer.echo(f"Checking status for: {interview_id}")
-    typer.echo("Boswell status - Not yet implemented")
+    interview = load_interview(interview_id)
+
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    typer.echo(f"Interview: {interview.id}")
+    typer.echo("-" * 40)
+    typer.echo(f"Topic: {interview.topic}")
+
+    # Color-code the status
+    status_colors = {
+        InterviewStatus.PENDING: typer.colors.YELLOW,
+        InterviewStatus.WAITING: typer.colors.CYAN,
+        InterviewStatus.IN_PROGRESS: typer.colors.BLUE,
+        InterviewStatus.PROCESSING: typer.colors.MAGENTA,
+        InterviewStatus.COMPLETE: typer.colors.GREEN,
+        InterviewStatus.NO_SHOW: typer.colors.RED,
+        InterviewStatus.ERROR: typer.colors.RED,
+    }
+    color = status_colors.get(interview.status, typer.colors.WHITE)
+    typer.echo("Status: ", nl=False)
+    typer.secho(interview.status.value, fg=color)
+
+    typer.echo(f"Created: {interview.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+    if interview.started_at:
+        typer.echo(
+            f"Started: {interview.started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+    if interview.completed_at:
+        typer.echo(
+            f"Completed: {interview.completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+
+    if interview.guest_name:
+        typer.echo(f"Guest: {interview.guest_name}")
+
+    if interview.meeting_link:
+        typer.echo(f"Meeting link: {interview.meeting_link}")
+
+    typer.echo(f"Research docs: {len(interview.research_docs)}")
+    typer.echo(f"Research URLs: {len(interview.research_urls)}")
+    typer.echo(f"Generated questions: {len(interview.generated_questions)}")
+    typer.echo(f"Target time: {interview.target_time_minutes} minutes")
+    typer.echo(f"Max time: {interview.max_time_minutes} minutes")
+
+    if interview.output_dir:
+        typer.echo(f"Output directory: {interview.output_dir}")
 
 
 @app.command()
@@ -177,7 +226,38 @@ def retry(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
 @app.command(name="list")
 def list_interviews() -> None:
     """List all past interviews."""
-    typer.echo("Boswell list - Not yet implemented")
+    interviews = get_all_interviews()
+
+    if not interviews:
+        typer.echo("No interviews found.")
+        typer.echo("Create one with: boswell create --topic 'Your topic'")
+        return
+
+    typer.echo(f"Found {len(interviews)} interview(s):")
+    typer.echo()
+
+    # Define status colors
+    status_colors = {
+        InterviewStatus.PENDING: typer.colors.YELLOW,
+        InterviewStatus.WAITING: typer.colors.CYAN,
+        InterviewStatus.IN_PROGRESS: typer.colors.BLUE,
+        InterviewStatus.PROCESSING: typer.colors.MAGENTA,
+        InterviewStatus.COMPLETE: typer.colors.GREEN,
+        InterviewStatus.NO_SHOW: typer.colors.RED,
+        InterviewStatus.ERROR: typer.colors.RED,
+    }
+
+    for interview in interviews:
+        # Format: ID | Status | Topic | Date
+        color = status_colors.get(interview.status, typer.colors.WHITE)
+        date_str = interview.created_at.strftime("%Y-%m-%d %H:%M")
+
+        typer.echo(f"  {interview.id}  ", nl=False)
+        typer.secho(f"{interview.status.value:12}", fg=color, nl=False)
+        typer.echo(f"  {date_str}  {interview.topic[:40]}")
+
+    typer.echo()
+    typer.echo("Use 'boswell status <id>' for details.")
 
 
 if __name__ == "__main__":
