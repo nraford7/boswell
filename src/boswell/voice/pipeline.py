@@ -83,7 +83,7 @@ async def create_pipeline(
     # Set up TTS (Text-to-Speech) with ElevenLabs
     tts = ElevenLabsTTSService(
         api_key=config.elevenlabs_api_key,
-        voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel - professional female voice
+        voice_id="XcXEQzuLXRU9RcfWzEJt",  # Veda Sky - natural mindful caring
         model="eleven_turbo_v2",  # Fast model for low latency
         voice_settings={
             "stability": 0.5,
