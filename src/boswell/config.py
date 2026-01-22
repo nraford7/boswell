@@ -3,6 +3,7 @@
 Manages API keys and settings stored in ~/.boswell/config.json
 """
 
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -87,6 +88,7 @@ def save_config(config: BoswellConfig) -> None:
     """Save configuration to ~/.boswell/config.json.
 
     Creates the config directory if it doesn't exist.
+    Sets file permissions to 0600 to protect API keys.
 
     Args:
         config: The configuration to save.
@@ -94,6 +96,8 @@ def save_config(config: BoswellConfig) -> None:
     config_path = get_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(config.model_dump_json(indent=2))
+    # Set restrictive permissions (owner read/write only) to protect API keys
+    os.chmod(config_path, 0o600)
 
 
 def validate_api_keys(config: BoswellConfig) -> dict[str, bool]:
@@ -106,8 +110,8 @@ def validate_api_keys(config: BoswellConfig) -> dict[str, bool]:
         Dictionary mapping API key names to whether they are set (non-empty).
     """
     return {
-        "claude_api_key": bool(config.claude_api_key),
-        "elevenlabs_api_key": bool(config.elevenlabs_api_key),
-        "deepgram_api_key": bool(config.deepgram_api_key),
-        "meetingbaas_api_key": bool(config.meetingbaas_api_key),
+        "claude_api_key": bool(config.claude_api_key.strip()),
+        "elevenlabs_api_key": bool(config.elevenlabs_api_key.strip()),
+        "deepgram_api_key": bool(config.deepgram_api_key.strip()),
+        "meetingbaas_api_key": bool(config.meetingbaas_api_key.strip()),
     }

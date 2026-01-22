@@ -269,12 +269,9 @@ class TestValidateApiKeys:
 
     def test_whitespace_only_is_falsy(self):
         """Test that whitespace-only values are considered unset."""
-        # Note: With current implementation, whitespace is truthy.
-        # This test documents current behavior.
         config = BoswellConfig(claude_api_key="   ")
 
         result = validate_api_keys(config)
 
-        # Whitespace is truthy in bool(), so this is True
-        # If we want whitespace to be False, we'd need to strip
-        assert result["claude_api_key"] is True
+        # Whitespace-only strings are stripped, so they are considered unset
+        assert result["claude_api_key"] is False
