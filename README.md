@@ -19,6 +19,8 @@ Boswell is designed for researchers, authors, and journalists who need to conduc
 - Dynamic follow-up questions that pursue interesting threads
 - **Pause & Resume** - Stop interviews and continue later with full context preserved
 - **Dynamic Speed Control** - Guests can ask the bot to speak faster or slower
+- **Strike from Record** - Guests can say "forget that" to remove content from transcript
+- **Privacy First** - Anonymous by default, transcript emailed to guest after
 - Immediate acknowledgments ("Mm-hmm", "I see") for natural conversation pacing
 - Automatic transcript capture and insight extraction
 - Low-latency voice synthesis (~500ms response time)
@@ -296,7 +298,12 @@ DAILY_API_KEY=...
 
 When your guest joins the Daily.co room:
 
-1. **Greeting** - Boswell introduces itself, explains the format (topic, timing, that they can pause/stop/ask for repeats), and asks if ready
+1. **Greeting** - Boswell introduces itself, explains:
+   - The interview topic and expected duration
+   - That the interview is anonymous (not attributed unless they want)
+   - They'll receive a full transcript via email after
+   - They can say "nevermind, forget that" to strike anything from the record
+   - They can pause, stop, or ask for repeats anytime
 2. **Core Questions** - Works through research-informed questions (one at a time, no sub-questions)
 3. **Acknowledgments** - Immediate "Mm-hmm", "I see" responses to show it's listening
 4. **Follow-ups** - Pursues interesting threads that emerge naturally
@@ -309,6 +316,7 @@ The AI interviewer is designed to be:
 - **Adaptive** - Follows interesting threads rather than rigid scripts
 - **Respectful** - Moves on gracefully if guest is uncomfortable
 - **Responsive** - Guests can say "slow down" or "speed up" to adjust speech rate
+- **Privacy-conscious** - Anonymous by default, with ability to strike content from record
 
 ## Output Format
 
@@ -377,7 +385,8 @@ boswell/
 │       ├── prompts.py       # System prompts for Claude
 │       ├── transcript.py    # Transcript capture
 │       ├── acknowledgment.py # Filler words ("Mm-hmm")
-│       └── speed_control.py  # Dynamic speech rate control
+│       ├── speed_control.py  # Dynamic speech rate control
+│       └── strike_control.py # "Forget that" content removal
 ├── tests/
 ├── docs/
 └── pyproject.toml
@@ -416,6 +425,7 @@ ruff check src/ tests/
 - [x] Pause & resume interviews with context preservation
 - [x] Dynamic speech speed control (guest can request faster/slower)
 - [x] Immediate acknowledgments for natural conversation flow
+- [x] Strike from record ("forget that" removes content from transcript)
 - [ ] Insights generation with quotes
 - [ ] Cloud deployment option
 - [ ] Recording and playback

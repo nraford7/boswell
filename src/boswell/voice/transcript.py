@@ -21,14 +21,18 @@ class TranscriptEntry:
     timestamp: str
     speaker: str  # "guest" or "boswell"
     text: str
+    struck: bool = False  # True if guest requested this be removed
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             "timestamp": self.timestamp,
             "speaker": self.speaker,
             "text": self.text,
         }
+        if self.struck:
+            result["struck"] = True
+        return result
 
 
 @dataclass
@@ -102,6 +106,23 @@ class TranscriptCollector(FrameProcessor):
     def get_entries(self) -> list[dict[str, Any]]:
         """Get transcript entries as list of dicts."""
         return [entry.to_dict() for entry in self.entries]
+
+    def get_entries_excluding_struck(self) -> list[dict[str, Any]]:
+        """Get transcript entries excluding struck content."""
+        return [entry.to_dict() for entry in self.entries if not entry.struck]
+
+    def strike_last_guest_entry(self) -> bool:
+        """Mark the last guest entry as struck from the record.
+
+        Returns:
+            True if an entry was struck, False if no guest entry found.
+        """
+        # Find the last guest entry and mark it as struck
+        for entry in reversed(self.entries):
+            if entry.speaker == "guest" and not entry.struck:
+                entry.struck = True
+                return True
+        return False
 
 
 class BotResponseCollector(FrameProcessor):
