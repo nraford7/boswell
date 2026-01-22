@@ -3,7 +3,7 @@
 Handles interview creation, state tracking, and persistence.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -27,7 +27,7 @@ class Interview(BaseModel):
     id: str = Field(..., description="Unique interview identifier")
     topic: str = Field(..., description="Interview topic/subject")
     status: InterviewStatus = Field(default=InterviewStatus.PENDING)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = Field(default=None)
     completed_at: datetime | None = Field(default=None)
     guest_name: str | None = Field(default=None)

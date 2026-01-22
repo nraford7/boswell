@@ -4,7 +4,7 @@ Handles dynamic interview conversation logic - letting Claude decide each turn.
 No graph structures, no scoring algorithms.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -38,7 +38,7 @@ class ConversationEngine:
         """Calculate remaining interview time."""
         if not self.state.started_at:
             return float(self.state.target_time_minutes)
-        elapsed = (datetime.utcnow() - self.state.started_at).total_seconds() / 60
+        elapsed = (datetime.now(timezone.utc) - self.state.started_at).total_seconds() / 60
         return max(0, self.state.target_time_minutes - elapsed)
 
     @property
@@ -103,5 +103,5 @@ class ConversationEngine:
         self.state.transcript.append({
             "speaker": speaker,
             "text": text,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
