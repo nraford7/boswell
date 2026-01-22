@@ -4,14 +4,20 @@ Handles creating speaking AI bots that join video calls to conduct interviews.
 Uses the MeetingBaaS Speaking Bots API.
 """
 
+import asyncio
 import re
+import time
 from pathlib import Path
 
 import httpx
 from pydantic import BaseModel, Field
 
 from boswell.config import load_config
-from boswell.interview import Interview
+from boswell.interview import Interview, InterviewStatus, load_interview, save_interview
+
+# No-show handling constants
+NO_SHOW_TIMEOUT_MINUTES = 10
+POLL_INTERVAL_SECONDS = 30
 
 
 class MeetingBaaSError(Exception):
@@ -323,3 +329,173 @@ def validate_meeting_url(url: str) -> bool:
     """
     client = MeetingBaaSClient("")  # Empty key just for validation
     return client._is_valid_meeting_url(url)
+
+
+# =============================================================================
+# No-Show Handling
+# =============================================================================
+
+
+def check_guest_joined(client: MeetingBaaSClient, bot_id: str) -> bool:
+    """Check if a guest has joined the meeting via bot status.
+
+    Interprets the bot status to determine if a guest (non-bot participant)
+    has joined the meeting. MeetingBaaS returns status with participant info.
+
+    Args:
+        client: The MeetingBaaS client instance.
+        bot_id: The bot ID to check status for.
+
+    Returns:
+        True if a guest has joined (participants > 1 and status is "in_meeting"),
+        False otherwise.
+
+    Raises:
+        MeetingBaaSError: If the status check fails.
+    """
+    status_data = client.get_bot_status(bot_id)
+    status = status_data.get("status", "")
+
+    # Check if bot is in meeting
+    if status != "in_meeting":
+        return False
+
+    # Check participant count - if more than just the bot, guest has joined
+    # MeetingBaaS may report participants in different ways depending on version
+    participants = status_data.get("participants", [])
+    participant_count = status_data.get("participant_count", len(participants))
+
+    # If we have participants > 1, or status indicates active conversation,
+    # consider guest joined
+    if participant_count > 1:
+        return True
+
+    # Also check for other indicators that guest joined
+    if status_data.get("conversation_active", False):
+        return True
+
+    return False
+
+
+async def wait_for_guest(
+    interview_id: str,
+    timeout_minutes: int = NO_SHOW_TIMEOUT_MINUTES,
+    poll_interval_seconds: int = POLL_INTERVAL_SECONDS,
+    progress_callback: callable = None,
+) -> bool:
+    """Wait for guest to join the meeting, polling bot status.
+
+    Polls the MeetingBaaS bot status at regular intervals to detect when
+    a guest joins. Updates interview status accordingly.
+
+    Args:
+        interview_id: The interview ID to monitor.
+        timeout_minutes: Maximum time to wait in minutes (default: 10).
+        poll_interval_seconds: Interval between status checks (default: 30).
+        progress_callback: Optional callback function(elapsed_seconds, remaining_seconds)
+            called after each poll to report progress.
+
+    Returns:
+        True if guest joined within timeout, False if timeout expired.
+
+    Raises:
+        ValueError: If interview not found or has no bot_id.
+        RuntimeError: If config not available.
+        MeetingBaaSError: If status checks fail repeatedly.
+    """
+    interview = load_interview(interview_id)
+    if interview is None:
+        raise ValueError(f"Interview not found: {interview_id}")
+
+    if not interview.bot_id:
+        raise ValueError(f"Interview {interview_id} has no bot_id set")
+
+    config = load_config()
+    if config is None or not config.meetingbaas_api_key:
+        raise RuntimeError(
+            "MeetingBaaS API key not configured. Run 'boswell init' to set up."
+        )
+
+    timeout_seconds = timeout_minutes * 60
+    start_time = time.time()
+
+    with MeetingBaaSClient(config.meetingbaas_api_key) as client:
+        while True:
+            elapsed = time.time() - start_time
+            remaining = timeout_seconds - elapsed
+
+            if remaining <= 0:
+                # Timeout - guest didn't join
+                return False
+
+            try:
+                if check_guest_joined(client, interview.bot_id):
+                    # Guest joined - update status to IN_PROGRESS
+                    interview.status = InterviewStatus.IN_PROGRESS
+                    from datetime import UTC, datetime
+                    interview.started_at = datetime.now(UTC)
+                    save_interview(interview)
+                    return True
+            except MeetingBaaSError:
+                # Log error but continue polling - may be transient
+                pass
+
+            # Report progress if callback provided
+            if progress_callback:
+                progress_callback(int(elapsed), int(remaining))
+
+            # Wait before next poll
+            await asyncio.sleep(poll_interval_seconds)
+
+
+def wait_for_guest_sync(
+    interview_id: str,
+    timeout_minutes: int = NO_SHOW_TIMEOUT_MINUTES,
+    poll_interval_seconds: int = POLL_INTERVAL_SECONDS,
+    progress_callback: callable = None,
+) -> bool:
+    """Synchronous version of wait_for_guest for CLI use.
+
+    Wraps the async wait_for_guest function for use in synchronous contexts.
+
+    Args:
+        interview_id: The interview ID to monitor.
+        timeout_minutes: Maximum time to wait in minutes (default: 10).
+        poll_interval_seconds: Interval between status checks (default: 30).
+        progress_callback: Optional callback function(elapsed_seconds, remaining_seconds).
+
+    Returns:
+        True if guest joined within timeout, False if timeout expired.
+    """
+    return asyncio.run(
+        wait_for_guest(
+            interview_id,
+            timeout_minutes,
+            poll_interval_seconds,
+            progress_callback,
+        )
+    )
+
+
+def handle_no_show(interview_id: str) -> Interview | None:
+    """Update interview status to NO_SHOW and clean up.
+
+    Called when a guest doesn't join within the timeout period.
+    Updates the interview status and sets completion timestamp.
+
+    Args:
+        interview_id: The interview ID to mark as no-show.
+
+    Returns:
+        The updated Interview object, or None if not found.
+    """
+    interview = load_interview(interview_id)
+    if interview is None:
+        return None
+
+    interview.status = InterviewStatus.NO_SHOW
+    from datetime import UTC, datetime
+    interview.completed_at = datetime.now(UTC)
+    save_interview(interview)
+
+    return interview

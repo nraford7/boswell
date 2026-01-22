@@ -19,8 +19,11 @@ from boswell.interview import (
 from boswell.interview import list_interviews as get_all_interviews
 from boswell.meeting import (
     MeetingBaaSError,
+    NO_SHOW_TIMEOUT_MINUTES,
     create_interview_bot,
+    handle_no_show,
     validate_meeting_url,
+    wait_for_guest_sync,
 )
 
 app = typer.Typer(
@@ -359,6 +362,110 @@ def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None
 
     if interview.output_dir:
         typer.echo(f"Output directory: {interview.output_dir}")
+
+
+@app.command()
+def wait(
+    interview_id: str = typer.Argument(..., help="Interview ID"),
+    timeout: int = typer.Option(
+        NO_SHOW_TIMEOUT_MINUTES,
+        "--timeout",
+        "-t",
+        help="Timeout in minutes",
+    ),
+) -> None:
+    """Wait for guest to join the interview meeting.
+
+    Polls the bot status every 30 seconds until the guest joins or timeout.
+    Updates interview status to IN_PROGRESS when guest joins, or NO_SHOW on timeout.
+    """
+    interview = load_interview(interview_id)
+
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    if not interview.bot_id:
+        typer.secho(
+            f"Interview {interview_id} has no bot dispatched. "
+            "Run 'boswell retry' to create a bot first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    if interview.status == InterviewStatus.IN_PROGRESS:
+        typer.secho("Guest already joined! Interview is in progress.", fg=typer.colors.GREEN)
+        return
+
+    if interview.status == InterviewStatus.COMPLETE:
+        typer.secho("Interview is already complete.", fg=typer.colors.CYAN)
+        return
+
+    if interview.status == InterviewStatus.NO_SHOW:
+        typer.secho(
+            "Interview was marked as no-show. Use 'boswell retry' to reschedule.",
+            fg=typer.colors.YELLOW,
+        )
+        return
+
+    typer.echo(f"Waiting for guest to join interview: {interview_id}")
+    typer.echo(f"Topic: {interview.topic}")
+    typer.echo(f"Timeout: {timeout} minutes")
+    typer.echo()
+    typer.echo("Share this link with your guest:")
+    typer.secho(f"  {interview.meeting_link}", fg=typer.colors.CYAN)
+    typer.echo()
+    typer.echo("Press Ctrl+C to cancel.")
+    typer.echo()
+
+    def progress_callback(elapsed_seconds: int, remaining_seconds: int) -> None:
+        """Display progress during wait."""
+        elapsed_min = elapsed_seconds // 60
+        elapsed_sec = elapsed_seconds % 60
+        remaining_min = remaining_seconds // 60
+        remaining_sec = remaining_seconds % 60
+        typer.echo(
+            f"  Waiting... {elapsed_min:02d}:{elapsed_sec:02d} elapsed, "
+            f"{remaining_min:02d}:{remaining_sec:02d} remaining",
+        )
+
+    try:
+        guest_joined = wait_for_guest_sync(
+            interview_id,
+            timeout_minutes=timeout,
+            progress_callback=progress_callback,
+        )
+
+        typer.echo()
+        if guest_joined:
+            typer.secho("Guest joined! Interview is now IN_PROGRESS.", fg=typer.colors.GREEN)
+            typer.echo(f"Check status: boswell status {interview_id}")
+        else:
+            # Handle no-show
+            handle_no_show(interview_id)
+            typer.secho(
+                f"Timeout: Guest did not join within {timeout} minutes.",
+                fg=typer.colors.RED,
+            )
+            typer.echo()
+            typer.echo("Interview marked as NO_SHOW.")
+            typer.echo("To reschedule with a new meeting link:")
+            typer.secho(f"  boswell retry {interview_id}", fg=typer.colors.CYAN)
+
+    except ValueError as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except RuntimeError as e:
+        typer.secho(f"Configuration error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        typer.echo()
+        typer.secho("Wait cancelled by user.", fg=typer.colors.YELLOW)
+        typer.echo(f"Interview status unchanged. Check with: boswell status {interview_id}")
+        raise typer.Exit(0)
+    except MeetingBaaSError as e:
+        typer.secho(f"MeetingBaaS error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command()

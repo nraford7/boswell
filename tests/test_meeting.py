@@ -1,6 +1,8 @@
 """Tests for MeetingBaaS integration module."""
 
+import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,15 +10,21 @@ import httpx
 import pytest
 
 from boswell.config import BoswellConfig
-from boswell.interview import Interview
+from boswell.interview import Interview, InterviewStatus
 from boswell.meeting import (
     MeetingBaaSClient,
     MeetingBaaSError,
+    NO_SHOW_TIMEOUT_MINUTES,
+    POLL_INTERVAL_SECONDS,
+    check_guest_joined,
     create_interview_bot,
     generate_meeting_url,
     get_persona_path,
+    handle_no_show,
     load_persona,
     validate_meeting_url,
+    wait_for_guest,
+    wait_for_guest_sync,
 )
 
 
@@ -378,3 +386,345 @@ class TestInterviewModelWithBotId:
         interview = Interview.model_validate_json(json_str)
 
         assert interview.bot_id == "bot_from_json"
+
+
+# =============================================================================
+# No-Show Handling Tests
+# =============================================================================
+
+
+class TestNoShowConstants:
+    """Tests for no-show handling constants."""
+
+    def test_default_timeout_value(self):
+        """Test that default timeout is 10 minutes."""
+        assert NO_SHOW_TIMEOUT_MINUTES == 10
+
+    def test_poll_interval_value(self):
+        """Test that poll interval is 30 seconds."""
+        assert POLL_INTERVAL_SECONDS == 30
+
+
+class TestCheckGuestJoined:
+    """Tests for check_guest_joined function."""
+
+    def test_guest_joined_with_multiple_participants(self):
+        """Test guest detection when participant_count > 1."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "bot_id": "bot_123",
+            "status": "in_meeting",
+            "participant_count": 2,
+            "participants": ["bot", "guest"],
+        }
+
+        result = check_guest_joined(mock_client, "bot_123")
+
+        assert result is True
+        mock_client.get_bot_status.assert_called_once_with("bot_123")
+
+    def test_guest_not_joined_only_bot(self):
+        """Test no guest when only bot is in meeting."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "bot_id": "bot_123",
+            "status": "in_meeting",
+            "participant_count": 1,
+            "participants": ["bot"],
+        }
+
+        result = check_guest_joined(mock_client, "bot_123")
+
+        assert result is False
+
+    def test_guest_not_joined_bot_not_in_meeting(self):
+        """Test no guest when bot not in meeting yet."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "bot_id": "bot_123",
+            "status": "joining",
+            "participant_count": 0,
+        }
+
+        result = check_guest_joined(mock_client, "bot_123")
+
+        assert result is False
+
+    def test_guest_joined_with_conversation_active(self):
+        """Test guest detection via conversation_active flag."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "bot_id": "bot_123",
+            "status": "in_meeting",
+            "participant_count": 1,
+            "conversation_active": True,
+        }
+
+        result = check_guest_joined(mock_client, "bot_123")
+
+        assert result is True
+
+    def test_guest_joined_inferred_from_participants_list(self):
+        """Test guest detection from participants list length."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "bot_id": "bot_123",
+            "status": "in_meeting",
+            "participants": ["bot", "guest"],
+        }
+
+        # participant_count not provided, should use len(participants)
+        result = check_guest_joined(mock_client, "bot_123")
+
+        assert result is True
+
+    def test_check_guest_raises_on_api_error(self):
+        """Test that API errors are propagated."""
+        mock_client = MagicMock()
+        mock_client.get_bot_status.side_effect = MeetingBaaSError("API error")
+
+        with pytest.raises(MeetingBaaSError, match="API error"):
+            check_guest_joined(mock_client, "bot_123")
+
+
+class TestHandleNoShow:
+    """Tests for handle_no_show function."""
+
+    def test_handle_no_show_updates_status(self, tmp_path, monkeypatch):
+        """Test that handle_no_show updates interview status to NO_SHOW."""
+        # Create a test interview file
+        interviews_dir = tmp_path / ".boswell" / "interviews"
+        interviews_dir.mkdir(parents=True)
+
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            status=InterviewStatus.WAITING,
+            bot_id="bot_abc",
+        )
+        interview_file = interviews_dir / "int_test123.json"
+        interview_file.write_text(interview.model_dump_json())
+
+        # Mock the interviews directory
+        monkeypatch.setattr(
+            "boswell.interview.get_interviews_dir",
+            lambda: interviews_dir,
+        )
+        monkeypatch.setattr(
+            "boswell.meeting.load_interview",
+            lambda id: Interview.model_validate_json(
+                (interviews_dir / f"{id}.json").read_text()
+            )
+            if (interviews_dir / f"{id}.json").exists()
+            else None,
+        )
+
+        def mock_save(i):
+            (interviews_dir / f"{i.id}.json").write_text(i.model_dump_json())
+
+        monkeypatch.setattr("boswell.meeting.save_interview", mock_save)
+
+        # Call handle_no_show
+        result = handle_no_show("int_test123")
+
+        assert result is not None
+        assert result.status == InterviewStatus.NO_SHOW
+        assert result.completed_at is not None
+
+    def test_handle_no_show_not_found(self, monkeypatch):
+        """Test handle_no_show returns None for non-existent interview."""
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: None)
+
+        result = handle_no_show("nonexistent")
+
+        assert result is None
+
+
+class TestWaitForGuest:
+    """Tests for wait_for_guest async function."""
+
+    def test_wait_for_guest_interview_not_found(self, monkeypatch):
+        """Test wait_for_guest raises ValueError when interview not found."""
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: None)
+
+        with pytest.raises(ValueError, match="Interview not found"):
+            asyncio.run(wait_for_guest("nonexistent"))
+
+    def test_wait_for_guest_no_bot_id(self, monkeypatch):
+        """Test wait_for_guest raises ValueError when no bot_id."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id=None,
+        )
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+
+        with pytest.raises(ValueError, match="has no bot_id"):
+            asyncio.run(wait_for_guest("int_test123"))
+
+    def test_wait_for_guest_no_config(self, monkeypatch):
+        """Test wait_for_guest raises RuntimeError when no config."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id="bot_abc",
+        )
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+        monkeypatch.setattr("boswell.meeting.load_config", lambda: None)
+
+        with pytest.raises(RuntimeError, match="API key not configured"):
+            asyncio.run(wait_for_guest("int_test123"))
+
+    def test_wait_for_guest_success(self, monkeypatch):
+        """Test wait_for_guest returns True when guest joins."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id="bot_abc",
+            status=InterviewStatus.WAITING,
+        )
+        config = BoswellConfig(meetingbaas_api_key="test-key")
+
+        saved_interview = None
+
+        def mock_save(i):
+            nonlocal saved_interview
+            saved_interview = i
+
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+        monkeypatch.setattr("boswell.meeting.load_config", lambda: config)
+        monkeypatch.setattr("boswell.meeting.save_interview", mock_save)
+
+        # Mock MeetingBaaSClient
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "status": "in_meeting",
+            "participant_count": 2,
+        }
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("boswell.meeting.MeetingBaaSClient", return_value=mock_client):
+            result = asyncio.run(
+                wait_for_guest(
+                    "int_test123",
+                    timeout_minutes=1,
+                    poll_interval_seconds=0.01,  # Very short for testing
+                )
+            )
+
+        assert result is True
+        assert saved_interview is not None
+        assert saved_interview.status == InterviewStatus.IN_PROGRESS
+        assert saved_interview.started_at is not None
+
+    def test_wait_for_guest_timeout(self, monkeypatch):
+        """Test wait_for_guest returns False on timeout."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id="bot_abc",
+            status=InterviewStatus.WAITING,
+        )
+        config = BoswellConfig(meetingbaas_api_key="test-key")
+
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+        monkeypatch.setattr("boswell.meeting.load_config", lambda: config)
+
+        # Mock MeetingBaaSClient - never report guest joined
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "status": "in_meeting",
+            "participant_count": 1,  # Only bot, no guest
+        }
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("boswell.meeting.MeetingBaaSClient", return_value=mock_client):
+            # Use very short timeout for testing
+            result = asyncio.run(
+                wait_for_guest(
+                    "int_test123",
+                    timeout_minutes=0.001,  # ~60ms timeout
+                    poll_interval_seconds=0.01,
+                )
+            )
+
+        assert result is False
+
+    def test_wait_for_guest_calls_progress_callback(self, monkeypatch):
+        """Test that progress callback is called during wait."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id="bot_abc",
+            status=InterviewStatus.WAITING,
+        )
+        config = BoswellConfig(meetingbaas_api_key="test-key")
+
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+        monkeypatch.setattr("boswell.meeting.load_config", lambda: config)
+
+        # Track callback calls
+        callback_calls = []
+
+        def progress_callback(elapsed, remaining):
+            callback_calls.append((elapsed, remaining))
+
+        # Mock MeetingBaaSClient - never report guest (will timeout)
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "status": "in_meeting",
+            "participant_count": 1,
+        }
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("boswell.meeting.MeetingBaaSClient", return_value=mock_client):
+            asyncio.run(
+                wait_for_guest(
+                    "int_test123",
+                    timeout_minutes=0.002,  # ~120ms
+                    poll_interval_seconds=0.02,  # 20ms
+                    progress_callback=progress_callback,
+                )
+            )
+
+        # At least one callback should have been made
+        assert len(callback_calls) >= 1
+
+
+class TestWaitForGuestSync:
+    """Tests for wait_for_guest_sync synchronous wrapper."""
+
+    def test_wait_for_guest_sync_wraps_async(self, monkeypatch):
+        """Test that sync wrapper properly wraps async function."""
+        interview = Interview(
+            id="int_test123",
+            topic="Test Topic",
+            bot_id="bot_abc",
+            status=InterviewStatus.WAITING,
+        )
+        config = BoswellConfig(meetingbaas_api_key="test-key")
+
+        monkeypatch.setattr("boswell.meeting.load_interview", lambda id: interview)
+        monkeypatch.setattr("boswell.meeting.load_config", lambda: config)
+        monkeypatch.setattr("boswell.meeting.save_interview", lambda i: None)
+
+        # Mock MeetingBaaSClient - report guest joined immediately
+        mock_client = MagicMock()
+        mock_client.get_bot_status.return_value = {
+            "status": "in_meeting",
+            "participant_count": 2,
+        }
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("boswell.meeting.MeetingBaaSClient", return_value=mock_client):
+            result = wait_for_guest_sync(
+                "int_test123",
+                timeout_minutes=1,
+                poll_interval_seconds=0.01,
+            )
+
+        assert result is True
