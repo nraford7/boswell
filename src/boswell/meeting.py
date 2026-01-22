@@ -62,7 +62,6 @@ class MeetingBaaSClient:
     def create_bot(
         self,
         meeting_url: str,
-        persona: str = "boswell_interviewer",
         entry_message: str | None = None,
         extra: dict | None = None,
     ) -> dict:
@@ -70,9 +69,9 @@ class MeetingBaaSClient:
 
         Args:
             meeting_url: The Zoom/Google Meet/Teams meeting URL.
-            persona: Name of the persona to use (default: boswell_interviewer).
             entry_message: Optional message the bot says when joining.
-            extra: Optional additional context for the bot.
+            extra: Optional additional context for the bot. If it contains
+                'persona_instructions', that becomes the bot's prompt.
 
         Returns:
             Dictionary with bot_id and status.
@@ -90,8 +89,6 @@ class MeetingBaaSClient:
 
         payload = {
             "meeting_url": meeting_url,
-            "meeting_baas_api_key": self.api_key,
-            "personas": [persona],
         }
 
         # Add optional parameters
@@ -101,11 +98,22 @@ class MeetingBaaSClient:
         if extra:
             payload["extra"] = extra
 
+            # If extra contains prompt/persona instructions, add as top-level prompt
+            if "persona_instructions" in extra:
+                payload["prompt"] = extra["persona_instructions"]
+
+            # Add bot name based on topic if available
+            if "topic" in extra:
+                payload["bot_name"] = "Boswell"
+
         try:
             response = self._client.post(
                 f"{self.BASE_URL}/bots",
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "x-meeting-baas-api-key": self.api_key,
+                },
             )
             response.raise_for_status()
 
@@ -274,19 +282,38 @@ def create_interview_bot(interview: Interview) -> str:
             "MeetingBaaS API key not configured. Run 'boswell init' to set up."
         )
 
-    # Build the extra context for the bot
+    # Build the interview prompt for the bot
+    questions_text = "\n".join(
+        f"{i+1}. {q}" for i, q in enumerate(interview.generated_questions)
+    )
+
+    persona_prompt = f"""You are Boswell, a skilled AI research interviewer conducting an interview about: {interview.topic}
+
+Your interview style:
+- Warm, curious, and intellectually engaged like an NPR interviewer
+- Ask open-ended questions that invite detailed responses
+- Listen actively and follow interesting threads
+- Acknowledge what the guest says before moving to new topics
+- Be conversational, not robotic
+
+Prepared questions (use as a guide, but follow the conversation naturally):
+{questions_text}
+
+Guidelines:
+- Start by greeting the guest and asking if they're ready to begin
+- Target interview length: {interview.target_time_minutes} minutes
+- Maximum time: {interview.max_time_minutes} minutes
+- Check in with the guest every 5 questions or so
+- When wrapping up, thank them and ask if there's anything they'd like to add
+
+Remember: Follow interesting threads that emerge. The prepared questions are a guide, not a script."""
+
+    # Build extra context
     extra_context = {
         "interview_id": interview.id,
         "topic": interview.topic,
-        "questions": interview.generated_questions,
-        "target_time_minutes": interview.target_time_minutes,
-        "max_time_minutes": interview.max_time_minutes,
+        "persona_instructions": persona_prompt,
     }
-
-    # Load persona content if available
-    persona_content = load_persona("boswell_interviewer")
-    if persona_content:
-        extra_context["persona_instructions"] = persona_content
 
     # Create entry message
     entry_message = (
@@ -297,7 +324,6 @@ def create_interview_bot(interview: Interview) -> str:
     with MeetingBaaSClient(config.meetingbaas_api_key) as client:
         result = client.create_bot(
             meeting_url=interview.meeting_link,
-            persona="boswell_interviewer",
             entry_message=entry_message,
             extra=extra_context,
         )

@@ -109,9 +109,8 @@ class TestMeetingBaaSClient:
 
         result = client.create_bot(
             meeting_url="https://meet.google.com/abc-defg-hij",
-            persona="boswell_interviewer",
             entry_message="Hello!",
-            extra={"topic": "AI"},
+            extra={"topic": "AI", "persona_instructions": "You are a helpful assistant."},
         )
 
         assert result["bot_id"] == "bot_123abc"
@@ -122,12 +121,15 @@ class TestMeetingBaaSClient:
         call_args = mock_http_client.post.call_args
         assert call_args[0][0] == "https://speaking.meetingbaas.com/bots"
 
+        # Check headers for API key authentication
+        headers = call_args[1]["headers"]
+        assert headers["x-meeting-baas-api-key"] == "test-api-key"
+
         payload = call_args[1]["json"]
         assert payload["meeting_url"] == "https://meet.google.com/abc-defg-hij"
-        assert payload["meeting_baas_api_key"] == "test-api-key"
-        assert payload["personas"] == ["boswell_interviewer"]
         assert payload["entry_message"] == "Hello!"
-        assert payload["extra"] == {"topic": "AI"}
+        assert payload["prompt"] == "You are a helpful assistant."
+        assert payload["bot_name"] == "Boswell"
 
     def test_create_bot_http_error(self):
         """Test create_bot raises MeetingBaaSError on HTTP error."""
@@ -324,11 +326,11 @@ class TestCreateInterviewBot:
         mock_client.create_bot.assert_called_once()
         call_kwargs = mock_client.create_bot.call_args[1]
         assert call_kwargs["meeting_url"] == "https://meet.google.com/abc-defg-hij"
-        assert call_kwargs["persona"] == "boswell_interviewer"
         assert "Hello" in call_kwargs["entry_message"]
         assert call_kwargs["extra"]["interview_id"] == "int_test123"
         assert call_kwargs["extra"]["topic"] == "Test Topic"
-        assert call_kwargs["extra"]["questions"] == ["Q1", "Q2"]
+        assert "persona_instructions" in call_kwargs["extra"]
+        assert "Test Topic" in call_kwargs["extra"]["persona_instructions"]
 
 
 class TestInterviewModelWithBotId:
