@@ -17,6 +17,11 @@ from boswell.interview import (
     save_interview,
 )
 from boswell.interview import list_interviews as get_all_interviews
+from boswell.meeting import (
+    MeetingBaaSError,
+    create_interview_bot,
+    validate_meeting_url,
+)
 
 app = typer.Typer(
     name="boswell",
@@ -195,15 +200,104 @@ def create(
         save_interview(interview)
 
         typer.echo()
-        typer.secho("Interview created successfully!", fg=typer.colors.GREEN)
-        typer.echo(f"  ID: {interview.id}")
-        typer.echo(f"  Topic: {interview.topic}")
+        typer.secho("Questions generated successfully!", fg=typer.colors.GREEN)
         typer.echo(f"  Questions generated: {len(questions)}")
         typer.echo()
-        typer.echo(f"Use 'boswell status {interview.id}' to view details.")
+
+        # Prompt for meeting URL
+        typer.echo("-" * 40)
+        typer.echo("Now we need a meeting link for the interview.")
+        typer.echo("Create a Google Meet or Zoom meeting and paste the URL below.")
+        typer.echo()
+
+        while True:
+            meeting_url = typer.prompt(
+                "Meeting URL (Google Meet or Zoom)",
+                default="",
+                show_default=False,
+            )
+
+            if not meeting_url.strip():
+                typer.secho(
+                    "Meeting URL is required to dispatch the interview bot.",
+                    fg=typer.colors.YELLOW,
+                )
+                skip = typer.confirm("Skip bot creation for now?", default=False)
+                if skip:
+                    typer.echo()
+                    typer.secho(
+                        "Interview created without bot.", fg=typer.colors.YELLOW
+                    )
+                    typer.echo(f"  ID: {interview.id}")
+                    typer.echo(f"  Topic: {interview.topic}")
+                    typer.echo()
+                    typer.echo(
+                        "Add a meeting URL later with 'boswell retry "
+                        f"{interview.id}'"
+                    )
+                    return
+                continue
+
+            if not validate_meeting_url(meeting_url):
+                typer.secho(
+                    "Invalid meeting URL. Please provide a Google Meet, Zoom, or "
+                    "Teams URL.",
+                    fg=typer.colors.RED,
+                )
+                continue
+
+            break
+
+        # Update interview with meeting link
+        interview.meeting_link = meeting_url.strip()
+        save_interview(interview)
+
+        # Create the MeetingBaaS bot
+        typer.echo()
+        typer.echo("Creating interview bot...")
+
+        # Check MeetingBaaS API key
+        if config is None or not config.meetingbaas_api_key:
+            typer.secho(
+                "Warning: MeetingBaaS API key not configured. Cannot create bot.",
+                fg=typer.colors.YELLOW,
+            )
+            typer.echo("Run 'boswell init' to configure, then use 'boswell retry'.")
+            typer.echo()
+            typer.echo(f"Interview ID: {interview.id}")
+            typer.echo(f"Meeting link saved: {interview.meeting_link}")
+            return
+
+        try:
+            bot_id = create_interview_bot(interview)
+            interview.bot_id = bot_id
+            interview.status = InterviewStatus.WAITING
+            save_interview(interview)
+
+            typer.echo()
+            typer.secho("Interview ready!", fg=typer.colors.GREEN)
+            typer.echo("=" * 40)
+            typer.echo(f"  ID: {interview.id}")
+            typer.echo(f"  Topic: {interview.topic}")
+            typer.echo(f"  Questions: {len(questions)}")
+            typer.echo(f"  Bot ID: {bot_id}")
+            typer.echo()
+            typer.echo("Share this link with your guest:")
+            typer.secho(f"  {interview.meeting_link}", fg=typer.colors.CYAN)
+            typer.echo()
+            typer.echo(f"Check status: boswell status {interview.id}")
+
+        except MeetingBaaSError as e:
+            typer.secho(f"Failed to create bot: {e}", fg=typer.colors.RED)
+            typer.echo("The interview was saved. Try again with 'boswell retry'.")
+            typer.echo(f"Interview ID: {interview.id}")
+            raise typer.Exit(1)
 
     except RuntimeError as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except MeetingBaaSError as e:
+        typer.secho(f"MeetingBaaS error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
     except Exception as e:
         typer.secho(f"Failed to create interview: {e}", fg=typer.colors.RED)
@@ -254,6 +348,9 @@ def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None
     if interview.meeting_link:
         typer.echo(f"Meeting link: {interview.meeting_link}")
 
+    if interview.bot_id:
+        typer.echo(f"Bot ID: {interview.bot_id}")
+
     typer.echo(f"Research docs: {len(interview.research_docs)}")
     typer.echo(f"Research URLs: {len(interview.research_urls)}")
     typer.echo(f"Generated questions: {len(interview.generated_questions)}")
@@ -277,8 +374,91 @@ def export(
 @app.command()
 def retry(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
     """Retry a no-show interview with a new meeting link."""
+    interview = load_interview(interview_id)
+
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    # Allow retry for pending, no_show, or error status
+    if interview.status not in (
+        InterviewStatus.PENDING,
+        InterviewStatus.NO_SHOW,
+        InterviewStatus.ERROR,
+    ):
+        typer.secho(
+            f"Cannot retry interview with status: {interview.status.value}",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Retry is only available for pending, no_show, or error interviews.")
+        raise typer.Exit(1)
+
     typer.echo(f"Retrying interview: {interview_id}")
-    typer.echo("Boswell retry - Not yet implemented")
+    typer.echo(f"Topic: {interview.topic}")
+    typer.echo()
+
+    # Check config
+    config = load_config()
+    if config is None or not config.meetingbaas_api_key:
+        typer.secho(
+            "MeetingBaaS API key not configured. Run 'boswell init' first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Prompt for new meeting URL
+    typer.echo("Enter a new meeting URL for the interview.")
+    if interview.meeting_link:
+        typer.echo(f"Previous URL: {interview.meeting_link}")
+    typer.echo()
+
+    while True:
+        meeting_url = typer.prompt(
+            "New meeting URL (Google Meet or Zoom)",
+            default="",
+            show_default=False,
+        )
+
+        if not meeting_url.strip():
+            typer.secho("Meeting URL is required.", fg=typer.colors.YELLOW)
+            continue
+
+        if not validate_meeting_url(meeting_url):
+            typer.secho(
+                "Invalid meeting URL. Provide a Google Meet, Zoom, or Teams URL.",
+                fg=typer.colors.RED,
+            )
+            continue
+
+        break
+
+    # Update interview with new meeting link
+    interview.meeting_link = meeting_url.strip()
+    save_interview(interview)
+
+    typer.echo()
+    typer.echo("Creating interview bot...")
+
+    try:
+        bot_id = create_interview_bot(interview)
+        interview.bot_id = bot_id
+        interview.status = InterviewStatus.WAITING
+        save_interview(interview)
+
+        typer.echo()
+        typer.secho("Interview ready!", fg=typer.colors.GREEN)
+        typer.echo("=" * 40)
+        typer.echo(f"  ID: {interview.id}")
+        typer.echo(f"  Bot ID: {bot_id}")
+        typer.echo()
+        typer.echo("Share this link with your guest:")
+        typer.secho(f"  {interview.meeting_link}", fg=typer.colors.CYAN)
+        typer.echo()
+        typer.echo(f"Check status: boswell status {interview.id}")
+
+    except MeetingBaaSError as e:
+        typer.secho(f"Failed to create bot: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command(name="list")

@@ -41,6 +41,7 @@ class Interview(BaseModel):
     target_time_minutes: int = Field(default=30)
     max_time_minutes: int = Field(default=45)
     output_dir: str | None = Field(default=None)
+    bot_id: str | None = Field(default=None, description="MeetingBaaS bot ID")
 
 
 def generate_interview_id() -> str:
