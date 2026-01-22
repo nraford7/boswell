@@ -9,7 +9,13 @@ from boswell.config import (
     save_config,
     validate_api_keys,
 )
-from boswell.interview import InterviewStatus, load_interview
+from boswell.ingestion import ingest_research
+from boswell.interview import (
+    InterviewStatus,
+    create_interview,
+    load_interview,
+    save_interview,
+)
 from boswell.interview import list_interviews as get_all_interviews
 
 app = typer.Typer(
@@ -144,12 +150,64 @@ def init() -> None:
 @app.command()
 def create(
     topic: str = typer.Option(..., "--topic", "-t", help="Interview topic"),
-    docs: str = typer.Option(None, "--docs", "-d", help="Path to research documents"),
+    docs: str = typer.Option(
+        None, "--docs", "-d", help="Comma-separated paths to research documents"
+    ),
     urls: str = typer.Option(None, "--urls", "-u", help="Comma-separated URLs"),
 ) -> None:
     """Create a new interview session."""
     typer.echo(f"Creating interview for topic: {topic}")
-    typer.echo("Boswell create - Not yet implemented")
+
+    # Parse documents and URLs
+    doc_list: list[str] = []
+    url_list: list[str] = []
+
+    if docs:
+        doc_list = [d.strip() for d in docs.split(",") if d.strip()]
+        typer.echo(f"Research documents: {len(doc_list)}")
+
+    if urls:
+        url_list = [u.strip() for u in urls.split(",") if u.strip()]
+        typer.echo(f"Research URLs: {len(url_list)}")
+
+    # Check if config exists for question generation
+    config = load_config()
+    if config is None or not config.claude_api_key:
+        typer.secho(
+            "Warning: Claude API key not configured. Cannot generate questions.",
+            fg=typer.colors.YELLOW,
+        )
+        typer.echo("Run 'boswell init' to configure, then create the interview.")
+        raise typer.Exit(1)
+
+    typer.echo()
+    typer.echo("Processing research materials...")
+
+    try:
+        # Ingest research and generate questions
+        aggregated_content, questions = ingest_research(topic, doc_list, url_list)
+
+        # Create the interview
+        interview = create_interview(topic=topic, docs=doc_list, urls=url_list)
+
+        # Update interview with generated questions
+        interview.generated_questions = questions
+        save_interview(interview)
+
+        typer.echo()
+        typer.secho("Interview created successfully!", fg=typer.colors.GREEN)
+        typer.echo(f"  ID: {interview.id}")
+        typer.echo(f"  Topic: {interview.topic}")
+        typer.echo(f"  Questions generated: {len(questions)}")
+        typer.echo()
+        typer.echo(f"Use 'boswell status {interview.id}' to view details.")
+
+    except RuntimeError as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.secho(f"Failed to create interview: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command()
