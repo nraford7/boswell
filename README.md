@@ -17,6 +17,9 @@ Boswell is designed for researchers, authors, and journalists who need to conduc
 - Research-informed question generation from documents and URLs
 - Real-time voice interviews with natural conversation flow
 - Dynamic follow-up questions that pursue interesting threads
+- **Pause & Resume** - Stop interviews and continue later with full context preserved
+- **Dynamic Speed Control** - Guests can ask the bot to speak faster or slower
+- Immediate acknowledgments ("Mm-hmm", "I see") for natural conversation pacing
 - Automatic transcript capture and insight extraction
 - Low-latency voice synthesis (~500ms response time)
 
@@ -137,7 +140,8 @@ boswell start int_abc123
 3. Bot joins and waits for guest
 4. Displays shareable room URL
 5. Conducts interview when guest joins
-6. Saves transcript when complete
+6. Press Ctrl+C to pause - saves conversation context for later
+7. Saves transcript when complete
 
 **Output:**
 ```
@@ -157,6 +161,25 @@ Bot is joining the room...
 Press Ctrl+C to end the interview.
 ```
 
+### `boswell resume`
+
+Resume a paused interview with full context preserved.
+
+```bash
+boswell resume int_abc123
+```
+
+**What happens:**
+1. Creates a new Daily.co room
+2. Loads conversation history from the paused session
+3. Bot welcomes guest back and continues where you left off
+4. All previous context is preserved
+
+**Tip:** Pause/resume is useful for:
+- Breaking long interviews into multiple sessions
+- Handling technical difficulties
+- Giving guests time to gather thoughts
+
 ### `boswell status`
 
 Check interview status.
@@ -169,6 +192,7 @@ boswell status int_abc123
 - `pending` - Created, not started
 - `waiting` - Bot in room, awaiting guest
 - `in_progress` - Interview happening
+- `paused` - Interview paused, can be resumed
 - `complete` - Interview finished
 - `error` - Something went wrong
 
@@ -272,17 +296,19 @@ DAILY_API_KEY=...
 
 When your guest joins the Daily.co room:
 
-1. **Greeting** - Boswell introduces itself, explains the format, asks if ready
-2. **Core Questions** - Works through research-informed questions
-3. **Follow-ups** - Pursues interesting threads that emerge naturally
-4. **Check-ins** - Periodically asks about time/comfort
-5. **Wrap-up** - Thanks guest, asks for final thoughts
+1. **Greeting** - Boswell introduces itself, explains the format (topic, timing, that they can pause/stop/ask for repeats), and asks if ready
+2. **Core Questions** - Works through research-informed questions (one at a time, no sub-questions)
+3. **Acknowledgments** - Immediate "Mm-hmm", "I see" responses to show it's listening
+4. **Follow-ups** - Pursues interesting threads that emerge naturally
+5. **Check-ins** - Periodically asks about time/comfort
+6. **Wrap-up** - Thanks guest, asks one time for final thoughts, then goodbye
 
 The AI interviewer is designed to be:
 - **Warm and curious** - Like an NPR interviewer
 - **Research-informed** - Questions reflect the provided materials
 - **Adaptive** - Follows interesting threads rather than rigid scripts
 - **Respectful** - Moves on gracefully if guest is uncomfortable
+- **Responsive** - Guests can say "slow down" or "speed up" to adjust speech rate
 
 ## Output Format
 
@@ -346,10 +372,12 @@ boswell/
 │   ├── ingestion.py     # Research processing
 │   ├── output.py        # Transcript & insights export
 │   └── voice/
-│       ├── bot.py       # Interview bot lifecycle
-│       ├── pipeline.py  # Pipecat voice pipeline
-│       ├── prompts.py   # System prompts for Claude
-│       └── transcript.py # Transcript capture
+│       ├── bot.py           # Interview bot lifecycle
+│       ├── pipeline.py      # Pipecat voice pipeline
+│       ├── prompts.py       # System prompts for Claude
+│       ├── transcript.py    # Transcript capture
+│       ├── acknowledgment.py # Filler words ("Mm-hmm")
+│       └── speed_control.py  # Dynamic speech rate control
 ├── tests/
 ├── docs/
 └── pyproject.toml
@@ -385,6 +413,9 @@ ruff check src/ tests/
 - [x] Real-time voice interviews via Daily.co + Pipecat
 - [x] Transcript capture
 - [x] Basic export (transcript.md)
+- [x] Pause & resume interviews with context preservation
+- [x] Dynamic speech speed control (guest can request faster/slower)
+- [x] Immediate acknowledgments for natural conversation flow
 - [ ] Insights generation with quotes
 - [ ] Cloud deployment option
 - [ ] Recording and playback

@@ -18,6 +18,7 @@ class InterviewStatus(str, Enum):
     PENDING = "pending"  # Interview created, waiting for guest
     WAITING = "waiting"  # Bot in meeting, waiting for guest to join
     IN_PROGRESS = "in_progress"  # Interview actively happening
+    PAUSED = "paused"  # Interview paused, can be resumed
     PROCESSING = "processing"  # Interview complete, generating outputs
     COMPLETE = "complete"  # All outputs ready
     NO_SHOW = "no_show"  # Guest didn't join within timeout
@@ -44,6 +45,13 @@ class Interview(BaseModel):
     bot_id: str | None = Field(default=None, description="MeetingBaaS bot ID")
     raw_transcript: list[dict] = Field(
         default_factory=list, description="Raw transcript from voice interview"
+    )
+    conversation_history: list[dict] = Field(
+        default_factory=list,
+        description="LLM conversation context for resuming paused interviews",
+    )
+    paused_at: datetime | None = Field(
+        default=None, description="When the interview was paused"
     )
 
 
@@ -185,6 +193,8 @@ def update_interview_status(
     now = datetime.now(UTC)
     if status == InterviewStatus.IN_PROGRESS and interview.started_at is None:
         interview.started_at = now
+    elif status == InterviewStatus.PAUSED:
+        interview.paused_at = now
     elif status in (
         InterviewStatus.COMPLETE,
         InterviewStatus.NO_SHOW,

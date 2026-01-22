@@ -332,6 +332,7 @@ def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None
         InterviewStatus.PENDING: typer.colors.YELLOW,
         InterviewStatus.WAITING: typer.colors.CYAN,
         InterviewStatus.IN_PROGRESS: typer.colors.BLUE,
+        InterviewStatus.PAUSED: typer.colors.YELLOW,
         InterviewStatus.PROCESSING: typer.colors.MAGENTA,
         InterviewStatus.COMPLETE: typer.colors.GREEN,
         InterviewStatus.NO_SHOW: typer.colors.RED,
@@ -346,6 +347,10 @@ def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None
     if interview.started_at:
         typer.echo(
             f"Started: {interview.started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+    if interview.paused_at:
+        typer.echo(
+            f"Paused: {interview.paused_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
         )
     if interview.completed_at:
         typer.echo(
@@ -367,8 +372,18 @@ def status(interview_id: str = typer.Argument(..., help="Interview ID")) -> None
     typer.echo(f"Target time: {interview.target_time_minutes} minutes")
     typer.echo(f"Max time: {interview.max_time_minutes} minutes")
 
+    if interview.conversation_history:
+        typer.echo(f"Conversation turns: {len(interview.conversation_history)}")
+
     if interview.output_dir:
         typer.echo(f"Output directory: {interview.output_dir}")
+
+    # Show resume hint for paused interviews
+    if interview.status == InterviewStatus.PAUSED:
+        typer.echo()
+        typer.secho(
+            f"Resume with: boswell resume {interview.id}", fg=typer.colors.CYAN
+        )
 
 
 @app.command()
@@ -703,6 +718,7 @@ def list_interviews() -> None:
         InterviewStatus.PENDING: typer.colors.YELLOW,
         InterviewStatus.WAITING: typer.colors.CYAN,
         InterviewStatus.IN_PROGRESS: typer.colors.BLUE,
+        InterviewStatus.PAUSED: typer.colors.YELLOW,
         InterviewStatus.PROCESSING: typer.colors.MAGENTA,
         InterviewStatus.COMPLETE: typer.colors.GREEN,
         InterviewStatus.NO_SHOW: typer.colors.RED,
@@ -832,14 +848,139 @@ def start(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
 
     except KeyboardInterrupt:
         typer.echo()
-        typer.secho("Interview ended by user.", fg=typer.colors.YELLOW)
-        # Update status
+        typer.secho("Interview paused by user.", fg=typer.colors.YELLOW)
+        # Reload to get updated conversation history saved by bot
         interview = load_interview(interview_id)
-        if interview and interview.status == InterviewStatus.IN_PROGRESS:
-            interview.status = InterviewStatus.COMPLETE
+        if interview and interview.status == InterviewStatus.PAUSED:
+            typer.echo("Interview saved with conversation context.")
+            typer.echo()
+            typer.echo(f"Resume later with: boswell resume {interview_id}")
+            typer.echo(f"Or export partial: boswell export {interview_id}")
+        elif interview and interview.status == InterviewStatus.IN_PROGRESS:
+            interview.status = InterviewStatus.PAUSED
             save_interview(interview)
-            typer.echo("Interview marked as complete.")
+            typer.echo("Interview marked as paused.")
+            typer.echo(f"Resume later with: boswell resume {interview_id}")
+
+    except RuntimeError as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def resume(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
+    """Resume a paused voice interview.
+
+    Continues a previously paused interview from where it left off.
+    The bot remembers the conversation context and welcomes the guest back.
+    """
+    interview = load_interview(interview_id)
+
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    if interview.status != InterviewStatus.PAUSED:
+        typer.secho(
+            f"Interview is not paused (status: {interview.status.value})",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Only paused interviews can be resumed.")
+        raise typer.Exit(1)
+
+    if not interview.conversation_history:
+        typer.secho(
+            "No conversation history found. Cannot resume.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Check config for required API keys
+    config = load_config()
+    if config is None:
+        typer.secho(
+            "Boswell not configured. Run 'boswell init' first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    missing_keys = []
+    if not config.daily_api_key:
+        missing_keys.append("daily_api_key")
+    if not config.claude_api_key:
+        missing_keys.append("claude_api_key")
+    if not config.deepgram_api_key:
+        missing_keys.append("deepgram_api_key")
+    if not config.elevenlabs_api_key:
+        missing_keys.append("elevenlabs_api_key")
+
+    if missing_keys:
+        typer.secho(
+            f"Missing required API keys: {', '.join(missing_keys)}",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Run 'boswell init' to configure.")
+        raise typer.Exit(1)
+
+    typer.echo(f"Resuming voice interview: {interview_id}")
+    typer.echo(f"Topic: {interview.topic}")
+    typer.echo(f"Conversation turns saved: {len(interview.conversation_history)}")
+    typer.echo()
+
+    # Import voice module
+    try:
+        from boswell.voice.bot import InterviewBot
+    except ImportError as e:
+        typer.secho(
+            "Voice dependencies not installed. Install with:",
+            fg=typer.colors.RED,
+        )
+        typer.echo("  pip install boswell[voice]")
+        typer.echo()
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1)
+
+    async def run_resume_bot() -> str:
+        """Run the voice bot in resume mode."""
+        bot = InterviewBot(interview)
+        room = await bot.create_room()
+
+        typer.echo()
+        typer.secho("Daily.co room created!", fg=typer.colors.GREEN)
+        typer.echo("=" * 50)
+        typer.echo()
+        typer.echo("Send this link to your guest:")
+        typer.secho(f"  {room.url}", fg=typer.colors.CYAN, bold=True)
+        typer.echo()
+        typer.echo("=" * 50)
+        typer.echo()
+        typer.secho("Resuming interview...", fg=typer.colors.YELLOW)
+        typer.echo("The bot will welcome the guest back and continue.")
+        typer.echo("Press Ctrl+C to pause again.")
+        typer.echo()
+
+        try:
+            await bot.resume()
+            return room.url
+        finally:
+            await bot.cleanup()
+
+    try:
+        asyncio.run(run_resume_bot())
+
+        typer.echo()
+        typer.secho("Interview completed!", fg=typer.colors.GREEN)
         typer.echo(f"Export with: boswell export {interview_id}")
+
+    except KeyboardInterrupt:
+        typer.echo()
+        typer.secho("Interview paused again.", fg=typer.colors.YELLOW)
+        interview = load_interview(interview_id)
+        if interview and interview.status == InterviewStatus.PAUSED:
+            typer.echo("Interview saved with conversation context.")
+            typer.echo()
+            typer.echo(f"Resume later with: boswell resume {interview_id}")
+            typer.echo(f"Or export partial: boswell export {interview_id}")
 
     except RuntimeError as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)

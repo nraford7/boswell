@@ -143,17 +143,94 @@ class InterviewBot:
             self.interview.status = InterviewStatus.IN_PROGRESS
             save_interview(self.interview)
 
-            transcript = await run_interview(
+            transcript, conversation_history = await run_interview(
                 room_url=room.url,
                 room_token=room.token,
                 system_prompt=system_prompt,
                 bot_name="Boswell",
             )
 
-            # Save transcript and mark complete
+            # Save transcript and conversation history
             self.interview.raw_transcript = transcript
+            self.interview.conversation_history = conversation_history
             self.interview.status = InterviewStatus.COMPLETE
             save_interview(self.interview)
+
+        except KeyboardInterrupt:
+            # User paused the interview (Ctrl+C)
+            self.interview.status = InterviewStatus.PAUSED
+            save_interview(self.interview)
+            raise
+
+        except Exception as e:
+            self.interview.status = InterviewStatus.ERROR
+            save_interview(self.interview)
+            raise RuntimeError(f"Interview failed: {e}") from e
+
+        return room.url
+
+    async def resume(self) -> str:
+        """Resume a paused interview.
+
+        Continues from where the interview left off using saved conversation history.
+
+        Returns:
+            The Daily.co room URL for guests to rejoin.
+
+        Raises:
+            RuntimeError: If bot fails to start or interview cannot be resumed.
+        """
+        if self.interview.status != InterviewStatus.PAUSED:
+            raise RuntimeError(
+                f"Cannot resume interview with status: {self.interview.status}. "
+                "Only PAUSED interviews can be resumed."
+            )
+
+        if not self.interview.conversation_history:
+            raise RuntimeError(
+                "No conversation history found. Cannot resume interview."
+            )
+
+        # Create a new room for the resumed interview
+        room = await self.create_room()
+
+        # Update interview status
+        self.interview.meeting_link = room.url
+        self.interview.status = InterviewStatus.WAITING
+        save_interview(self.interview)
+
+        # Build the system prompt (same as original)
+        system_prompt = build_system_prompt(
+            topic=self.interview.topic,
+            questions=self.interview.generated_questions,
+            target_minutes=self.interview.target_time_minutes,
+            max_minutes=self.interview.max_time_minutes,
+        )
+
+        # Run the voice pipeline with existing conversation history
+        try:
+            self.interview.status = InterviewStatus.IN_PROGRESS
+            save_interview(self.interview)
+
+            transcript, conversation_history = await run_interview(
+                room_url=room.url,
+                room_token=room.token,
+                system_prompt=system_prompt,
+                bot_name="Boswell",
+                initial_messages=self.interview.conversation_history,
+            )
+
+            # Merge new transcript with existing
+            self.interview.raw_transcript.extend(transcript)
+            self.interview.conversation_history = conversation_history
+            self.interview.status = InterviewStatus.COMPLETE
+            save_interview(self.interview)
+
+        except KeyboardInterrupt:
+            # User paused again
+            self.interview.status = InterviewStatus.PAUSED
+            save_interview(self.interview)
+            raise
 
         except Exception as e:
             self.interview.status = InterviewStatus.ERROR
@@ -201,3 +278,30 @@ async def start_interview_bot(interview_id: str) -> str:
 
     bot = InterviewBot(interview)
     return await bot.start()
+
+
+async def resume_interview_bot(interview_id: str) -> str:
+    """Resume a paused interview bot.
+
+    Args:
+        interview_id: The interview ID to resume.
+
+    Returns:
+        The Daily.co room URL for guests to rejoin.
+
+    Raises:
+        ValueError: If interview not found.
+        RuntimeError: If interview cannot be resumed.
+    """
+    interview = load_interview(interview_id)
+    if interview is None:
+        raise ValueError(f"Interview not found: {interview_id}")
+
+    if interview.status != InterviewStatus.PAUSED:
+        raise ValueError(
+            f"Interview {interview_id} is not paused (status: {interview.status}). "
+            "Only paused interviews can be resumed."
+        )
+
+    bot = InterviewBot(interview)
+    return await bot.resume()

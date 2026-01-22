@@ -25,7 +25,8 @@ async def create_pipeline(
     system_prompt: str,
     bot_name: str = "Boswell",
     on_transcript_update: Callable | None = None,
-) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector]:
+    initial_messages: list[dict] | None = None,
+) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, OpenAILLMContext]:
     """Create a Pipecat pipeline for voice interviews.
 
     Args:
@@ -34,9 +35,10 @@ async def create_pipeline(
         system_prompt: System prompt for Claude with interview context.
         bot_name: Display name for the bot in the room.
         on_transcript_update: Optional callback for transcript updates.
+        initial_messages: Optional conversation history for resuming paused interviews.
 
     Returns:
-        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector).
+        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector, OpenAILLMContext).
 
     Raises:
         RuntimeError: If required API keys are not configured.
@@ -100,9 +102,14 @@ async def create_pipeline(
     )
 
     # Set up conversation context
-    messages = [
-        {"role": "system", "content": system_prompt},
-    ]
+    if initial_messages:
+        # Resume from previous conversation history
+        messages = initial_messages
+    else:
+        # Start fresh with system prompt
+        messages = [
+            {"role": "system", "content": system_prompt},
+        ]
     context = OpenAILLMContext(messages)
     context_aggregator = llm.create_context_aggregator(context)
 
@@ -143,17 +150,29 @@ async def create_pipeline(
         ),
     )
 
+    # Track if this is a resumed interview
+    is_resumed = initial_messages is not None
+
     # Event handlers
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):
         """Greet the guest when they join."""
-        # Trigger the initial greeting with full context
-        await task.queue_frames(
-            [LLMMessagesFrame([{
-                "role": "user",
-                "content": "The guest has just joined the room. Follow your OPENING THE INTERVIEW instructions exactly - greet them, explain the interview, mention the timing, tell them about pauses and that they can stop/repeat anytime, then ask if they're ready."
-            }])]
-        )
+        if is_resumed:
+            # Resuming a paused interview - welcome back message
+            await task.queue_frames(
+                [LLMMessagesFrame([{
+                    "role": "user",
+                    "content": "The guest has rejoined after a pause. Welcome them back warmly and briefly remind them where you left off. Then continue the interview naturally."
+                }])]
+            )
+        else:
+            # New interview - full greeting
+            await task.queue_frames(
+                [LLMMessagesFrame([{
+                    "role": "user",
+                    "content": "The guest has just joined the room. Follow your OPENING THE INTERVIEW instructions exactly - greet them, explain the interview, mention the timing, tell them about pauses and that they can stop/repeat anytime, then ask if they're ready."
+                }])]
+            )
 
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant, reason):
@@ -170,7 +189,7 @@ async def create_pipeline(
     # Create runner
     runner = PipelineRunner()
 
-    return task, runner, transcript_collector
+    return task, runner, transcript_collector, context
 
 
 async def run_interview(
@@ -178,7 +197,8 @@ async def run_interview(
     room_token: str,
     system_prompt: str,
     bot_name: str = "Boswell",
-) -> list[dict[str, Any]]:
+    initial_messages: list[dict] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict]]:
     """Run a voice interview session.
 
     Args:
@@ -186,18 +206,20 @@ async def run_interview(
         room_token: Daily.co room token.
         system_prompt: System prompt for Claude.
         bot_name: Display name for the bot.
+        initial_messages: Optional conversation history for resuming.
 
     Returns:
-        List of transcript entries as dictionaries.
+        Tuple of (transcript entries, conversation history).
     """
-    task, runner, transcript_collector = await create_pipeline(
+    task, runner, transcript_collector, context = await create_pipeline(
         room_url=room_url,
         room_token=room_token,
         system_prompt=system_prompt,
         bot_name=bot_name,
+        initial_messages=initial_messages,
     )
 
     await runner.run(task)
 
-    # Return collected transcript
-    return transcript_collector.get_entries()
+    # Return collected transcript and conversation history for potential resume
+    return transcript_collector.get_entries(), context.messages
