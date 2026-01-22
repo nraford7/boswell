@@ -18,6 +18,7 @@ ENV_VAR_MAPPING = {
     "claude_api_key": "CLAUDE_API_KEY",
     "elevenlabs_api_key": "ELEVENLABS_API_KEY",
     "deepgram_api_key": "DEEPGRAM_API_KEY",
+    "daily_api_key": "DAILY_API_KEY",
     "meetingbaas_api_key": "MEETINGBAAS_API_KEY",
     "meeting_provider": "BOSWELL_MEETING_PROVIDER",
     "default_target_time": "BOSWELL_DEFAULT_TARGET_TIME",
@@ -40,8 +41,11 @@ class BoswellConfig(BaseModel):
     deepgram_api_key: str = Field(
         default="", description="Deepgram STT API key"
     )
+    daily_api_key: str = Field(
+        default="", description="Daily.co API key for video rooms"
+    )
     meetingbaas_api_key: str = Field(
-        default="", description="MeetingBaaS API key"
+        default="", description="MeetingBaaS API key (legacy)"
     )
     meeting_provider: str = Field(
         default="google_meet", description="Meeting provider (google_meet or zoom)"
@@ -165,5 +169,6 @@ def validate_api_keys(config: BoswellConfig) -> dict[str, bool]:
         "claude_api_key": bool(config.claude_api_key.strip()),
         "elevenlabs_api_key": bool(config.elevenlabs_api_key.strip()),
         "deepgram_api_key": bool(config.deepgram_api_key.strip()),
+        "daily_api_key": bool(config.daily_api_key.strip()),
         "meetingbaas_api_key": bool(config.meetingbaas_api_key.strip()),
     }

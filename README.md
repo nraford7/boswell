@@ -1,88 +1,116 @@
 # Boswell: AI Research Interviewer
 
-An open-source AI interviewer that joins Zoom/Meet calls, conducts research-informed interviews autonomously, and outputs structured transcripts and insights.
+An open-source AI interviewer that conducts research-informed voice interviews autonomously and outputs structured transcripts and insights.
 
 ## Overview
 
-Boswell is designed for researchers and journalists who need to conduct substantive interviews at scale without losing the human touch. You provide a topic and research materials, Boswell generates interview questions and dispatches an AI bot to your meeting. Your guest joins, and the AI conducts a dynamic, research-informed interview.
+Boswell is designed for researchers, authors, and journalists who need to conduct substantive interviews at scale without losing the human touch. You provide a topic and research materials, Boswell generates tailored interview questions, then conducts a real-time voice interview using AI.
+
+**How it works:**
+1. Provide a topic and research materials (PDFs, documents, URLs)
+2. Boswell generates informed interview questions using Claude
+3. Start a voice interview session - Boswell creates a video room you share with your guest
+4. The AI conducts a dynamic, conversational interview following interesting threads
+5. Export clean transcripts and AI-generated insights
 
 **Key Features:**
 - Research-informed question generation from documents and URLs
-- Dynamic conversation that follows interesting threads
-- Automatic transcript cleanup and insight extraction
-- Support for Google Meet, Zoom, and Microsoft Teams
+- Real-time voice interviews with natural conversation flow
+- Dynamic follow-up questions that pursue interesting threads
+- Automatic transcript capture and insight extraction
+- Low-latency voice synthesis (~500ms response time)
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        BOSWELL CLI                          │
+│     boswell create | start | status | export | list         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                     VOICE PIPELINE                          │
+│  ┌──────────┐   ┌────────┐   ┌────────┐   ┌────────────┐   │
+│  │ Daily.co │──▶│Deepgram│──▶│ Claude │──▶│ ElevenLabs │   │
+│  │Transport │   │  STT   │   │  LLM   │   │    TTS     │   │
+│  └──────────┘   └────────┘   └────────┘   └────────────┘   │
+│       │              │            │             │           │
+│       ▼              ▼            ▼             ▼           │
+│    [Audio In]   [Transcript]  [Response]   [Audio Out]     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                    EXTERNAL SERVICES                        │
+│  • Daily.co    - WebRTC video rooms                         │
+│  • Deepgram    - Speech-to-text (Nova-2)                    │
+│  • Claude      - Conversation intelligence (Sonnet 4)       │
+│  • ElevenLabs  - Text-to-speech (Turbo v2)                  │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- API keys for: Claude, ElevenLabs, Deepgram, MeetingBaaS
+- API keys for: Claude (Anthropic), Daily.co, Deepgram, ElevenLabs
 
-### Local Installation
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourname/boswell
+git clone https://github.com/noahraford/boswell
 cd boswell
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate
 
-# Install in development mode
-pip install -e ".[dev]"
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your API keys
+# Install with voice dependencies
+pip install -e ".[voice]"
 
 # Initialize configuration
 boswell init
 ```
 
-### Docker Installation
+### Your First Interview
 
 ```bash
-# Clone and set up
-git clone https://github.com/yourname/boswell
-cd boswell
-cp .env.example .env
-# Edit .env with your API keys
+# 1. Create an interview with research materials
+boswell create --topic "AI Safety Research" --docs ./research/paper.pdf
 
-# Build and run
-docker-compose build
-docker-compose run --rm boswell init
+# 2. Start the voice bot
+boswell start int_abc123
 
-# Run commands
-docker-compose run --rm boswell create --topic "Your topic"
-docker-compose run --rm boswell list
+# 3. Share the Daily.co room URL with your guest
+#    The bot will greet them and conduct the interview
+
+# 4. Export transcript and insights when done
+boswell export int_abc123
 ```
 
 ## CLI Commands
 
 ### `boswell init`
 
-Initialize Boswell configuration with API keys. Creates `~/.boswell/config.json` with your credentials and preferences.
+Initialize Boswell with your API keys.
 
 ```bash
 boswell init
 ```
 
 Prompts for:
-- Claude API key (required)
-- ElevenLabs API key (required)
-- Deepgram API key (required)
-- MeetingBaaS API key (required)
-- Meeting provider preference (google_meet or zoom)
-- Default interview times
+- **Claude API Key** (required) - For question generation and conversation
+- **Deepgram API Key** (required) - For speech-to-text
+- **ElevenLabs API Key** (required) - For text-to-speech
+- **Daily.co API Key** (required) - For video rooms
 
 ### `boswell create`
 
 Create a new interview session with research materials.
 
 ```bash
-boswell create --topic "AI safety research" --docs ./research/paper.pdf,./notes.md --urls https://example.com/bio
+boswell create --topic "Future of Work" --docs ./research.pdf,./notes.md --urls https://guest-bio.com
 ```
 
 **Options:**
@@ -91,89 +119,103 @@ boswell create --topic "AI safety research" --docs ./research/paper.pdf,./notes.
 - `--urls, -u`: Comma-separated URLs to scrape for research
 
 **What happens:**
-1. Ingests research documents and URLs
+1. Ingests and processes research materials
 2. Generates tailored interview questions using Claude
-3. Prompts for a meeting URL (Google Meet, Zoom, or Teams)
-4. Dispatches an AI bot to the meeting
-5. Returns the interview ID for tracking
+3. Creates an interview record ready for voice session
+
+### `boswell start`
+
+Start a voice interview bot.
+
+```bash
+boswell start int_abc123
+```
+
+**What happens:**
+1. Creates a Daily.co video room
+2. Starts the Pipecat voice pipeline
+3. Bot joins and waits for guest
+4. Displays shareable room URL
+5. Conducts interview when guest joins
+6. Saves transcript when complete
+
+**Output:**
+```
+Starting voice interview: int_abc123
+Topic: AI Safety Research
+Questions: 12
+
+Daily.co room created!
+==================================================
+
+Send this link to your guest:
+  https://yourname.daily.co/boswell-int_abc123
+
+==================================================
+
+Bot is joining the room...
+Press Ctrl+C to end the interview.
+```
 
 ### `boswell status`
 
-Check the status of an interview.
+Check interview status.
 
 ```bash
-boswell status int_7x8f2k
+boswell status int_abc123
 ```
 
-**Possible statuses:**
-- `pending`: Interview created, no bot dispatched
-- `waiting`: Bot in meeting, waiting for guest
-- `in_progress`: Interview actively happening
-- `processing`: Interview complete, generating outputs
-- `complete`: All outputs ready
-- `no_show`: Guest didn't join within timeout
-- `error`: Something went wrong
+**Statuses:**
+- `pending` - Created, not started
+- `waiting` - Bot in room, awaiting guest
+- `in_progress` - Interview happening
+- `complete` - Interview finished
+- `error` - Something went wrong
 
-### `boswell wait`
+### `boswell export`
 
-Wait for guest to join the interview meeting with real-time status updates.
+Export transcript and insights.
 
 ```bash
-boswell wait int_7x8f2k --timeout 15
+boswell export int_abc123 --output ./interviews/
 ```
 
 **Options:**
-- `--timeout, -t`: Maximum wait time in minutes (default: 10)
+- `--output, -o`: Output directory
+- `--transcript, -t`: Path to external transcript JSON (optional)
 
-Polls the bot status every 30 seconds and updates the interview status when the guest joins or timeout expires.
+**Outputs:**
+- `transcript.md` - Clean, formatted interview transcript
+- `insights.md` - Key themes, notable quotes, and summary
 
 ### `boswell list`
 
-List all past interviews.
+List all interviews.
 
 ```bash
 boswell list
 ```
 
-Displays interview ID, status, creation date, and topic for all interviews.
-
-### `boswell export`
-
-Export interview outputs (transcript.md and insights.md).
-
-```bash
-boswell export int_7x8f2k --output ./interviews/ --transcript ./raw_transcript.json
-```
-
-**Options:**
-- `--output, -o`: Output directory (default: `outputs/YYYY-MM-DD-guest-name/`)
-- `--transcript, -t`: Path to raw transcript JSON file
-
-**Outputs:**
-- `transcript.md`: Clean, readable interview transcript with YAML frontmatter
-- `insights.md`: Key themes, notable quotes, and summary
-
 ### `boswell retry`
 
-Retry a no-show or failed interview with a new meeting link.
+Retry a failed or no-show interview.
 
 ```bash
-boswell retry int_7x8f2k
+boswell retry int_abc123
 ```
-
-Available for interviews with status: pending, no_show, or error.
 
 ## Configuration
 
-### Config File (~/.boswell/config.json)
+### Config File
+
+Located at `~/.boswell/config.json`:
 
 ```json
 {
   "claude_api_key": "sk-ant-...",
-  "elevenlabs_api_key": "...",
   "deepgram_api_key": "...",
-  "meetingbaas_api_key": "...",
-  "meeting_provider": "google_meet",
+  "elevenlabs_api_key": "...",
+  "daily_api_key": "...",
   "default_target_time": 30,
   "default_max_time": 45
 }
@@ -181,98 +223,66 @@ Available for interviews with status: pending, no_show, or error.
 
 ### Environment Variables
 
-You can also configure Boswell using environment variables in a `.env` file:
+Alternatively, use a `.env` file:
 
 ```bash
 CLAUDE_API_KEY=sk-ant-...
-ELEVENLABS_API_KEY=...
 DEEPGRAM_API_KEY=...
-MEETINGBAAS_API_KEY=...
+ELEVENLABS_API_KEY=...
+DAILY_API_KEY=...
 ```
 
-## Example Workflow
-
-```bash
-# 1. Initialize configuration (one-time)
-boswell init
-
-# 2. Prepare research materials
-# - PDFs, text files, or markdown documents about your guest/topic
-# - URLs to their bio, publications, or relevant pages
-
-# 3. Create the interview
-boswell create \
-  --topic "Future of AI governance" \
-  --docs ./research/guest-publications.pdf,./prep-notes.md \
-  --urls https://guest-bio.com
-
-# 4. Share the meeting link with your guest
-# The CLI will display the link to share
-
-# 5. Wait for the guest (optional)
-boswell wait int_abc123 --timeout 15
-
-# 6. Check status
-boswell status int_abc123
-
-# 7. Export when complete
-boswell export int_abc123 --output ./interviews/governance-interview/
-```
-
-## Architecture
+## Interview Flow
 
 ```
-                          BOSWELL CLI
-     boswell create | status | wait | export | retry | list
-                              |
-                    BOSWELL CORE (Python)
-     +-------------------------------------------------+
-     | - Interview lifecycle management                 |
-     | - Research ingestion (docs + URLs -> Claude)     |
-     | - Dynamic conversation logic                     |
-     | - Output pipeline (transcript -> insights)       |
-     +-------------------------------------------------+
-                              |
-                   EXTERNAL SERVICES
-     +-------------------------------------------------+
-     | Pipecat          | Voice agent framework        |
-     | MeetingBaaS      | Bot dispatch to meetings     |
-     | ElevenLabs       | Text-to-speech               |
-     | Deepgram         | Speech-to-text               |
-     | Claude API       | Question gen & conversation  |
-     +-------------------------------------------------+
+┌─────────────────┐
+│  boswell create │  ← Provide topic + research
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Questions      │  ← Claude generates tailored questions
+│  Generated      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  boswell start  │  ← Creates Daily.co room
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Share URL      │  ← Guest joins video room
+│  with Guest     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Voice          │  ← Real-time conversation
+│  Interview      │     Deepgram → Claude → ElevenLabs
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  boswell export │  ← transcript.md + insights.md
+└─────────────────┘
 ```
 
-### Module Overview
+## The Interview Experience
 
-| Module | Purpose |
-|--------|---------|
-| `cli.py` | Command-line interface using Typer |
-| `config.py` | Configuration management (~/.boswell/config.json) |
-| `interview.py` | Interview model and lifecycle management |
-| `ingestion.py` | Research processing and question generation |
-| `meeting.py` | MeetingBaaS integration for bot dispatch |
-| `conversation.py` | Dynamic conversation engine |
-| `output.py` | Transcript cleanup and insight extraction |
+When your guest joins the Daily.co room:
 
-## Interview States
+1. **Greeting** - Boswell introduces itself, explains the format, asks if ready
+2. **Core Questions** - Works through research-informed questions
+3. **Follow-ups** - Pursues interesting threads that emerge naturally
+4. **Check-ins** - Periodically asks about time/comfort
+5. **Wrap-up** - Thanks guest, asks for final thoughts
 
-```
-PENDING ─────────────────┐
-    │                    │
-    ▼                    │ (retry)
-WAITING ─────────────────┤
-    │                    │
-    ├───────┬───────┐    │
-    ▼       ▼       ▼    │
-IN_PROGRESS NO_SHOW ERROR
-    │          │       │
-    ▼          └───────┘
-PROCESSING
-    │
-    ▼
-COMPLETE
-```
+The AI interviewer is designed to be:
+- **Warm and curious** - Like an NPR interviewer
+- **Research-informed** - Questions reflect the provided materials
+- **Adaptive** - Follows interesting threads rather than rigid scripts
+- **Respectful** - Moves on gracefully if guest is uncomfortable
 
 ## Output Format
 
@@ -280,97 +290,119 @@ COMPLETE
 
 ```markdown
 ---
-interview_id: int_7x8f2k
-guest: Jane Smith
+interview_id: int_abc123
+topic: AI Safety Research
 date: 2024-01-22
-duration: 32min
-topic: AI safety research
+duration: 28 minutes
 ---
 
 # Interview Transcript
 
-**Boswell:** Tell me about your path into AI safety...
+**Boswell:** Before we get into the specifics, I want to understand
+why you first got interested in AI safety. What was the moment or
+realization that drew you to this work?
 
-**Jane:** I started in theoretical physics, actually...
+**Guest:** It actually started during my PhD in physics. I was
+working on complex systems and started seeing parallels...
+
+**Boswell:** That's fascinating - the connection to complex systems.
+Can you say more about what parallels you were seeing?
 ```
 
 ### insights.md
 
 ```markdown
-# Key Insights
+# Interview Insights
 
-## Theme 1: From Physics to AI Safety
-Jane's transition from physics gave her a unique lens...
+## Key Themes
+
+### 1. From Physics to AI Safety
+The guest's background in complex systems shaped their approach...
 > "The problems felt similar - you're reasoning about systems
-> you can't fully observe" (4:32)
+> you can't fully observe"
 
-## Theme 2: The Alignment Problem
-She believes public discourse undersells the difficulty...
+### 2. The Coordination Challenge
+...
 
 ## Notable Quotes
-> "We're not even sure what the right questions are yet" (12:15)
+
+> "We're building systems that will be smarter than us, and we
+> don't have a good theory of how to keep them aligned with
+> human values"
 
 ## Summary
-[2-3 paragraph overview]
+
+[AI-generated 2-3 paragraph overview]
+```
+
+## Project Structure
+
+```
+boswell/
+├── src/boswell/
+│   ├── cli.py           # Command-line interface
+│   ├── config.py        # Configuration management
+│   ├── interview.py     # Interview model & lifecycle
+│   ├── ingestion.py     # Research processing
+│   ├── output.py        # Transcript & insights export
+│   └── voice/
+│       ├── bot.py       # Interview bot lifecycle
+│       ├── pipeline.py  # Pipecat voice pipeline
+│       ├── prompts.py   # System prompts for Claude
+│       └── transcript.py # Transcript capture
+├── tests/
+├── docs/
+└── pyproject.toml
 ```
 
 ## Development
 
-### Running Tests
-
 ```bash
 # Install dev dependencies
-pip install -e ".[dev]"
+pip install -e ".[dev,voice]"
 
 # Run tests
 pytest tests/ -v
 
-# Run with coverage
-pytest tests/ --cov=boswell
-```
-
-### Linting
-
-```bash
-# Check linting
+# Lint
 ruff check src/ tests/
-
-# Auto-fix issues
-ruff check --fix src/ tests/
 ```
 
-## Tech Stack
+## Service Costs
 
-| Component | Technology |
-|-----------|------------|
-| Voice Framework | Pipecat |
-| Meeting Integration | MeetingBaaS Speaking Bots API |
-| Text-to-Speech | ElevenLabs |
-| Speech-to-Text | Deepgram |
-| LLM | Claude API (claude-sonnet-4) |
-| CLI | Typer |
-| Validation | Pydantic |
-| HTTP Client | httpx |
-
-## External Service Costs
-
-| Service | Purpose | Billing |
+| Service | Purpose | Pricing |
 |---------|---------|---------|
-| Claude API | Question generation, conversation, analysis | Per token |
-| ElevenLabs | AI interviewer voice | Per character |
-| Deepgram | Real-time transcription | Per minute |
-| MeetingBaaS | Meeting room creation, bot dispatch | Per meeting |
+| Daily.co | Video rooms | 10k free mins/month, then $0.004/min |
+| Deepgram | Speech-to-text | $0.0043/min (Nova-2) |
+| ElevenLabs | Text-to-speech | $0.30/1k chars (Turbo) |
+| Claude | LLM | $3/$15 per 1M tokens (Sonnet) |
 
-Users bring their own API keys.
+**Estimated cost per 30-min interview:** ~$2-4
+
+## Roadmap
+
+- [x] Research ingestion and question generation
+- [x] Real-time voice interviews via Daily.co + Pipecat
+- [x] Transcript capture
+- [x] Basic export (transcript.md)
+- [ ] Insights generation with quotes
+- [ ] Cloud deployment option
+- [ ] Recording and playback
+- [ ] Multi-language support
 
 ## License
 
 MIT
 
-## References
+## Acknowledgments
 
-- [Pipecat](https://github.com/pipecat-ai/pipecat) - Voice agent framework
-- [MeetingBaaS](https://meetingbaas.com) - Meeting bot infrastructure
-- [ElevenLabs](https://elevenlabs.io) - Text-to-speech API
-- [Deepgram](https://deepgram.com) - Speech-to-text API
-- [Anthropic Claude](https://anthropic.com) - LLM API
+Built with:
+- [Pipecat](https://github.com/pipecat-ai/pipecat) - Voice AI framework
+- [Daily.co](https://daily.co) - WebRTC infrastructure
+- [Deepgram](https://deepgram.com) - Speech-to-text
+- [ElevenLabs](https://elevenlabs.io) - Text-to-speech
+- [Anthropic Claude](https://anthropic.com) - LLM
+
+---
+
+*Named after James Boswell, the 18th-century biographer famous for his detailed, conversational biography of Samuel Johnson.*

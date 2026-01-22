@@ -33,9 +33,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+voice = [
+    "pipecat-ai>=0.0.40",
+    "pipecat-ai[daily]>=0.0.40",
+    "pipecat-ai[deepgram]>=0.0.40",
+    "pipecat-ai[elevenlabs]>=0.0.40",
+    "pipecat-ai[anthropic]>=0.0.40",
+]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.3.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [project.scripts]

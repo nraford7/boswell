@@ -1,5 +1,7 @@
 """Boswell CLI - Command-line interface for the AI Research Interviewer."""
 
+import asyncio
+
 import typer
 
 from boswell.config import (
@@ -94,7 +96,10 @@ def init() -> None:
         "Deepgram API Key", existing_config.deepgram_api_key, required=True
     )
     meetingbaas_key = _prompt_api_key(
-        "MeetingBaaS API Key", existing_config.meetingbaas_api_key, required=True
+        "MeetingBaaS API Key", existing_config.meetingbaas_api_key, required=False
+    )
+    daily_key = _prompt_api_key(
+        "Daily.co API Key", existing_config.daily_api_key, required=True
     )
 
     typer.echo()
@@ -126,6 +131,7 @@ def init() -> None:
         elevenlabs_api_key=elevenlabs_key,
         deepgram_api_key=deepgram_key,
         meetingbaas_api_key=meetingbaas_key,
+        daily_api_key=daily_key,
         meeting_provider=meeting_provider,
         default_target_time=target_time,
         default_max_time=max_time,
@@ -535,15 +541,19 @@ def export(
             typer.secho(f"Invalid JSON in transcript file: {e}", fg=typer.colors.RED)
             raise typer.Exit(1)
     else:
-        # For now, require transcript file
-        # Future: load from stored conversation state
-        typer.secho(
-            "Transcript file required. Use --transcript/-t to specify path.",
-            fg=typer.colors.RED,
-        )
-        typer.echo()
-        typer.echo("Example: boswell export int_abc123 -t transcript.json")
-        raise typer.Exit(1)
+        # Use stored transcript from interview
+        if interview.raw_transcript:
+            raw_transcript = interview.raw_transcript
+            typer.echo(f"Using stored transcript: {len(raw_transcript)} entries")
+        else:
+            typer.secho(
+                "No transcript available. Run a voice interview first, or use "
+                "--transcript/-t to specify a transcript file.",
+                fg=typer.colors.RED,
+            )
+            typer.echo()
+            typer.echo("Example: boswell export int_abc123 -t transcript.json")
+            raise typer.Exit(1)
 
     # Determine output directory
     if output:
@@ -710,6 +720,130 @@ def list_interviews() -> None:
 
     typer.echo()
     typer.echo("Use 'boswell status <id>' for details.")
+
+
+@app.command()
+def start(interview_id: str = typer.Argument(..., help="Interview ID")) -> None:
+    """Start a voice interview bot using Daily.co.
+
+    Creates a Daily.co room, starts the Pipecat voice bot, and displays
+    the room URL for guests to join. The bot will conduct the interview
+    using the generated questions.
+    """
+    interview = load_interview(interview_id)
+
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    if not interview.generated_questions:
+        typer.secho(
+            f"Interview {interview_id} has no questions generated.",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Create an interview with research materials first.")
+        raise typer.Exit(1)
+
+    if interview.status == InterviewStatus.COMPLETE:
+        typer.secho("Interview is already complete.", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+    if interview.status == InterviewStatus.IN_PROGRESS:
+        typer.secho(
+            "Interview is already in progress.", fg=typer.colors.YELLOW
+        )
+        raise typer.Exit(1)
+
+    # Check config for required API keys
+    config = load_config()
+    if config is None:
+        typer.secho(
+            "Boswell not configured. Run 'boswell init' first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    missing_keys = []
+    if not config.daily_api_key:
+        missing_keys.append("daily_api_key")
+    if not config.claude_api_key:
+        missing_keys.append("claude_api_key")
+    if not config.deepgram_api_key:
+        missing_keys.append("deepgram_api_key")
+    if not config.elevenlabs_api_key:
+        missing_keys.append("elevenlabs_api_key")
+
+    if missing_keys:
+        typer.secho(
+            f"Missing required API keys: {', '.join(missing_keys)}",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Run 'boswell init' to configure.")
+        raise typer.Exit(1)
+
+    typer.echo(f"Starting voice interview: {interview_id}")
+    typer.echo(f"Topic: {interview.topic}")
+    typer.echo(f"Questions: {len(interview.generated_questions)}")
+    typer.echo()
+
+    # Import voice module (optional dependency)
+    try:
+        from boswell.voice.bot import InterviewBot
+    except ImportError as e:
+        typer.secho(
+            "Voice dependencies not installed. Install with:",
+            fg=typer.colors.RED,
+        )
+        typer.echo("  pip install boswell[voice]")
+        typer.echo()
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1)
+
+    async def run_voice_bot() -> str:
+        """Run the voice bot and return the room URL."""
+        bot = InterviewBot(interview)
+        room = await bot.create_room()
+
+        typer.echo()
+        typer.secho("Daily.co room created!", fg=typer.colors.GREEN)
+        typer.echo("=" * 50)
+        typer.echo()
+        typer.echo("Send this link to your guest:")
+        typer.secho(f"  {room.url}", fg=typer.colors.CYAN, bold=True)
+        typer.echo()
+        typer.echo("=" * 50)
+        typer.echo()
+        typer.secho("Bot is joining the room...", fg=typer.colors.YELLOW)
+        typer.echo("Press Ctrl+C to end the interview.")
+        typer.echo()
+
+        try:
+            await bot.start()
+            return room.url
+        finally:
+            await bot.cleanup()
+
+    try:
+        asyncio.run(run_voice_bot())
+
+        typer.echo()
+        typer.secho("Interview completed!", fg=typer.colors.GREEN)
+        typer.echo(f"Export with: boswell export {interview_id}")
+
+    except KeyboardInterrupt:
+        typer.echo()
+        typer.secho("Interview ended by user.", fg=typer.colors.YELLOW)
+        # Update status
+        interview = load_interview(interview_id)
+        if interview and interview.status == InterviewStatus.IN_PROGRESS:
+            interview.status = InterviewStatus.COMPLETE
+            save_interview(interview)
+            typer.echo("Interview marked as complete.")
+        typer.echo(f"Export with: boswell export {interview_id}")
+
+    except RuntimeError as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

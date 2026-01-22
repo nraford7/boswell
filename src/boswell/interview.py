@@ -42,6 +42,9 @@ class Interview(BaseModel):
     max_time_minutes: int = Field(default=45)
     output_dir: str | None = Field(default=None)
     bot_id: str | None = Field(default=None, description="MeetingBaaS bot ID")
+    raw_transcript: list[dict] = Field(
+        default_factory=list, description="Raw transcript from voice interview"
+    )
 
 
 def generate_interview_id() -> str:
