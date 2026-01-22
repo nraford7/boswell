@@ -34,7 +34,7 @@ class TestMeetingBaaSClient:
         """Test client initialization."""
         client = MeetingBaaSClient("test-api-key")
         assert client.api_key == "test-api-key"
-        assert client.BASE_URL == "https://speaking.meetingbaas.com"
+        assert client.BASE_URL == "https://api.meetingbaas.com/v2"
 
     def test_context_manager(self):
         """Test client works as context manager."""
@@ -93,11 +93,11 @@ class TestMeetingBaaSClient:
 
     def test_create_bot_success(self):
         """Test successful bot creation."""
-        # Mock the HTTP client response
+        # Mock the HTTP client response (v2 API format)
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "bot_id": "bot_123abc",
-            "status": "created",
+            "success": True,
+            "data": {"bot_id": "bot_123abc"},
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -109,8 +109,7 @@ class TestMeetingBaaSClient:
 
         result = client.create_bot(
             meeting_url="https://meet.google.com/abc-defg-hij",
-            entry_message="Hello!",
-            extra={"topic": "AI", "persona_instructions": "You are a helpful assistant."},
+            extra={"topic": "AI", "interview_id": "int_123"},
         )
 
         assert result["bot_id"] == "bot_123abc"
@@ -119,7 +118,7 @@ class TestMeetingBaaSClient:
         # Verify the API was called correctly
         mock_http_client.post.assert_called_once()
         call_args = mock_http_client.post.call_args
-        assert call_args[0][0] == "https://speaking.meetingbaas.com/bots"
+        assert call_args[0][0] == "https://api.meetingbaas.com/v2/bots"
 
         # Check headers for API key authentication
         headers = call_args[1]["headers"]
@@ -127,9 +126,8 @@ class TestMeetingBaaSClient:
 
         payload = call_args[1]["json"]
         assert payload["meeting_url"] == "https://meet.google.com/abc-defg-hij"
-        assert payload["entry_message"] == "Hello!"
-        assert payload["prompt"] == "You are a helpful assistant."
         assert payload["bot_name"] == "Boswell"
+        assert payload["extra"]["topic"] == "AI"
 
     def test_create_bot_http_error(self):
         """Test create_bot raises MeetingBaaSError on HTTP error."""
@@ -326,11 +324,9 @@ class TestCreateInterviewBot:
         mock_client.create_bot.assert_called_once()
         call_kwargs = mock_client.create_bot.call_args[1]
         assert call_kwargs["meeting_url"] == "https://meet.google.com/abc-defg-hij"
-        assert "Hello" in call_kwargs["entry_message"]
         assert call_kwargs["extra"]["interview_id"] == "int_test123"
         assert call_kwargs["extra"]["topic"] == "Test Topic"
-        assert "persona_instructions" in call_kwargs["extra"]
-        assert "Test Topic" in call_kwargs["extra"]["persona_instructions"]
+        assert call_kwargs["extra"]["questions"] == ["Q1", "Q2"]
 
 
 class TestInterviewModelWithBotId:

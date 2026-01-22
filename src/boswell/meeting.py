@@ -42,13 +42,14 @@ class BotStatusResponse(BaseModel):
 
 
 class MeetingBaaSClient:
-    """Client for interacting with MeetingBaaS Speaking Bots API.
+    """Client for interacting with MeetingBaaS v2 API.
 
-    The Speaking Bots API allows creating AI bots that can join video calls
-    and conduct conversations using configured personas.
+    The v2 API allows creating bots that join video calls to record
+    and transcribe meetings. Use for recording interviews where the
+    human conducts the conversation using Boswell's generated questions.
     """
 
-    BASE_URL = "https://speaking.meetingbaas.com"
+    BASE_URL = "https://api.meetingbaas.com/v2"
 
     def __init__(self, api_key: str) -> None:
         """Initialize the MeetingBaaS client.
@@ -62,16 +63,13 @@ class MeetingBaaSClient:
     def create_bot(
         self,
         meeting_url: str,
-        entry_message: str | None = None,
         extra: dict | None = None,
     ) -> dict:
-        """Create a speaking bot and dispatch it to a meeting.
+        """Create a recording bot and dispatch it to a meeting.
 
         Args:
             meeting_url: The Zoom/Google Meet/Teams meeting URL.
-            entry_message: Optional message the bot says when joining.
-            extra: Optional additional context for the bot. If it contains
-                'persona_instructions', that becomes the bot's prompt.
+            extra: Optional additional context to store with the recording.
 
         Returns:
             Dictionary with bot_id and status.
@@ -89,22 +87,12 @@ class MeetingBaaSClient:
 
         payload = {
             "meeting_url": meeting_url,
+            "bot_name": "Boswell",
         }
 
-        # Add optional parameters
-        if entry_message:
-            payload["entry_message"] = entry_message
-
+        # Add optional extra context (stored with recording)
         if extra:
             payload["extra"] = extra
-
-            # If extra contains prompt/persona instructions, add as top-level prompt
-            if "persona_instructions" in extra:
-                payload["prompt"] = extra["persona_instructions"]
-
-            # Add bot name based on topic if available
-            if "topic" in extra:
-                payload["bot_name"] = "Boswell"
 
         try:
             response = self._client.post(
@@ -118,9 +106,11 @@ class MeetingBaaSClient:
             response.raise_for_status()
 
             data = response.json()
+            # v2 API returns {"success": true, "data": {"bot_id": "..."}}
+            bot_data = data.get("data", data)
             return {
-                "bot_id": data.get("bot_id", data.get("id", "")),
-                "status": data.get("status", "created"),
+                "bot_id": bot_data.get("bot_id", bot_data.get("id", "")),
+                "status": "created",
             }
 
         except httpx.HTTPStatusError as e:
@@ -282,49 +272,16 @@ def create_interview_bot(interview: Interview) -> str:
             "MeetingBaaS API key not configured. Run 'boswell init' to set up."
         )
 
-    # Build the interview prompt for the bot
-    questions_text = "\n".join(
-        f"{i+1}. {q}" for i, q in enumerate(interview.generated_questions)
-    )
-
-    persona_prompt = f"""You are Boswell, a skilled AI research interviewer conducting an interview about: {interview.topic}
-
-Your interview style:
-- Warm, curious, and intellectually engaged like an NPR interviewer
-- Ask open-ended questions that invite detailed responses
-- Listen actively and follow interesting threads
-- Acknowledge what the guest says before moving to new topics
-- Be conversational, not robotic
-
-Prepared questions (use as a guide, but follow the conversation naturally):
-{questions_text}
-
-Guidelines:
-- Start by greeting the guest and asking if they're ready to begin
-- Target interview length: {interview.target_time_minutes} minutes
-- Maximum time: {interview.max_time_minutes} minutes
-- Check in with the guest every 5 questions or so
-- When wrapping up, thank them and ask if there's anything they'd like to add
-
-Remember: Follow interesting threads that emerge. The prepared questions are a guide, not a script."""
-
-    # Build extra context
+    # Build extra context to store with the recording
     extra_context = {
         "interview_id": interview.id,
         "topic": interview.topic,
-        "persona_instructions": persona_prompt,
+        "questions": interview.generated_questions,
     }
-
-    # Create entry message
-    entry_message = (
-        "Hello! I'm Boswell, your AI interviewer. "
-        "Thank you for joining. When you're ready, we can begin the interview."
-    )
 
     with MeetingBaaSClient(config.meetingbaas_api_key) as client:
         result = client.create_bot(
             meeting_url=interview.meeting_link,
-            entry_message=entry_message,
             extra=extra_context,
         )
 
