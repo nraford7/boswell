@@ -137,9 +137,12 @@ async def create_pipeline(
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):
         """Greet the guest when they join."""
-        # Trigger the initial greeting
+        # Trigger the initial greeting with full context
         await task.queue_frames(
-            [LLMMessagesFrame([{"role": "user", "content": "The guest has just joined. Greet them."}])]
+            [LLMMessagesFrame([{
+                "role": "user",
+                "content": "The guest has just joined the room. Follow your OPENING THE INTERVIEW instructions exactly - greet them, explain the interview, mention the timing, tell them about pauses and that they can stop/repeat anytime, then ask if they're ready."
+            }])]
         )
 
     @transport.event_handler("on_participant_left")
