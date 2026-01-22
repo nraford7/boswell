@@ -18,13 +18,14 @@ from boswell.interview import (
 )
 from boswell.interview import list_interviews as get_all_interviews
 from boswell.meeting import (
-    MeetingBaaSError,
     NO_SHOW_TIMEOUT_MINUTES,
+    MeetingBaaSError,
     create_interview_bot,
     handle_no_show,
     validate_meeting_url,
     wait_for_guest_sync,
 )
+from boswell.output import export_interview, generate_output_path
 
 app = typer.Typer(
     name="boswell",
@@ -471,11 +472,111 @@ def wait(
 @app.command()
 def export(
     interview_id: str = typer.Argument(..., help="Interview ID"),
-    output: str = typer.Option("./", "--output", "-o", help="Output directory"),
+    output: str = typer.Option(None, "--output", "-o", help="Output directory"),
+    transcript_file: str = typer.Option(
+        None, "--transcript", "-t", help="Path to raw transcript JSON file"
+    ),
 ) -> None:
-    """Export interview outputs (transcript, insights, audio)."""
-    typer.echo(f"Exporting interview {interview_id} to {output}")
-    typer.echo("Boswell export - Not yet implemented")
+    """Export interview outputs (transcript.md and insights.md).
+
+    Processes raw interview transcripts into clean markdown with insights.
+    Requires a completed interview and transcript data.
+    """
+    import json
+    from pathlib import Path
+
+    # Load the interview
+    interview = load_interview(interview_id)
+    if interview is None:
+        typer.secho(f"Interview not found: {interview_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    typer.echo(f"Exporting interview: {interview_id}")
+    typer.echo(f"Topic: {interview.topic}")
+    typer.echo()
+
+    # Check config for Claude API key
+    config = load_config()
+    if config is None or not config.claude_api_key:
+        typer.secho(
+            "Claude API key not configured. Run 'boswell init' first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Load transcript data
+    raw_transcript: list[dict] = []
+
+    if transcript_file:
+        transcript_path = Path(transcript_file)
+        if not transcript_path.exists():
+            typer.secho(
+                f"Transcript file not found: {transcript_file}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+
+        try:
+            raw_transcript = json.loads(transcript_path.read_text())
+            if not isinstance(raw_transcript, list):
+                typer.secho(
+                    "Transcript file must contain a JSON array of entries.",
+                    fg=typer.colors.RED,
+                )
+                raise typer.Exit(1)
+            typer.echo(f"Loaded transcript: {len(raw_transcript)} entries")
+        except json.JSONDecodeError as e:
+            typer.secho(f"Invalid JSON in transcript file: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+    else:
+        # For now, require transcript file
+        # Future: load from stored conversation state
+        typer.secho(
+            "Transcript file required. Use --transcript/-t to specify path.",
+            fg=typer.colors.RED,
+        )
+        typer.echo()
+        typer.echo("Example: boswell export int_abc123 -t transcript.json")
+        raise typer.Exit(1)
+
+    # Determine output directory
+    if output:
+        output_dir = Path(output)
+    else:
+        # Generate default output path
+        date_str = interview.created_at.strftime("%Y-%m-%d")
+        output_dir = generate_output_path(
+            interview_id=interview.id,
+            guest_name=interview.guest_name,
+            date=date_str,
+        )
+
+    typer.echo(f"Output directory: {output_dir}")
+    typer.echo()
+
+    # Process and export
+    typer.echo("Processing transcript...")
+    try:
+        transcript_path, insights_path = export_interview(
+            interview_id=interview_id,
+            output_dir=output_dir,
+            raw_transcript=raw_transcript,
+        )
+
+        typer.echo()
+        typer.secho("Export complete!", fg=typer.colors.GREEN)
+        typer.echo("=" * 40)
+        typer.echo(f"Transcript: {transcript_path}")
+        typer.echo(f"Insights:   {insights_path}")
+        typer.echo()
+        typer.echo("Interview output_dir updated.")
+
+    except RuntimeError as e:
+        typer.secho(f"Export failed: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except ValueError as e:
+        typer.secho(f"Export failed: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command()
