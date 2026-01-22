@@ -15,6 +15,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 from boswell.config import load_config
 from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
+from boswell.voice.acknowledgment import AcknowledgmentProcessor
 
 
 async def create_pipeline(
@@ -108,13 +109,17 @@ async def create_pipeline(
     transcript_collector = TranscriptCollector()
     bot_response_collector = BotResponseCollector(transcript_collector)
 
+    # Set up immediate acknowledgment for reduced perceived latency
+    acknowledgment_processor = AcknowledgmentProcessor()
+
     # Build the pipeline
-    # Audio flows: transport.input -> stt -> transcript -> llm -> bot_collector -> tts -> transport.output
+    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> bot_collector -> tts -> output
     pipeline = Pipeline(
         [
             transport.input(),
             stt,
             transcript_collector,  # Capture guest speech after STT
+            acknowledgment_processor,  # Immediate filler acknowledgment
             context_aggregator.user(),
             llm,
             bot_response_collector,  # Capture bot responses after LLM
