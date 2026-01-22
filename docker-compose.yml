@@ -1,0 +1,26 @@
+# Boswell AI Research Interviewer
+# Docker Compose configuration
+
+services:
+  boswell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: boswell
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    # Mount outputs directory for persistence
+    volumes:
+      - ./outputs:/app/outputs
+      # Mount config directory for persistent settings
+      - boswell-config:/root/.boswell
+    # Interactive mode for CLI usage
+    stdin_open: true
+    tty: true
+    # Override entrypoint for development/interactive use
+    # entrypoint: ["/bin/bash"]
+
+volumes:
+  boswell-config:
+    name: boswell-config
