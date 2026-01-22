@@ -9,6 +9,7 @@ from boswell.config import (
     get_config_dir,
     get_config_path,
     load_config,
+    load_config_from_env,
     save_config,
     validate_api_keys,
 )
@@ -275,3 +276,113 @@ class TestValidateApiKeys:
 
         # Whitespace-only strings are stripped, so they are considered unset
         assert result["claude_api_key"] is False
+
+
+class TestEnvironmentVariables:
+    """Tests for environment variable configuration."""
+
+    def test_load_config_from_env_empty(self, monkeypatch):
+        """Test load_config_from_env returns empty dict when no env vars set."""
+        # Clear any existing env vars
+        for env_var in [
+            "CLAUDE_API_KEY",
+            "ELEVENLABS_API_KEY",
+            "DEEPGRAM_API_KEY",
+            "MEETINGBAAS_API_KEY",
+        ]:
+            monkeypatch.delenv(env_var, raising=False)
+
+        result = load_config_from_env()
+
+        assert result == {}
+
+    def test_load_config_from_env_with_api_keys(self, monkeypatch):
+        """Test load_config_from_env loads API keys from environment."""
+        monkeypatch.setenv("CLAUDE_API_KEY", "sk-env-claude")
+        monkeypatch.setenv("DEEPGRAM_API_KEY", "dg-env-key")
+
+        result = load_config_from_env()
+
+        assert result["claude_api_key"] == "sk-env-claude"
+        assert result["deepgram_api_key"] == "dg-env-key"
+        assert "elevenlabs_api_key" not in result
+
+    def test_load_config_from_env_with_numeric_values(self, monkeypatch):
+        """Test load_config_from_env converts numeric env vars correctly."""
+        monkeypatch.setenv("BOSWELL_DEFAULT_TARGET_TIME", "20")
+        monkeypatch.setenv("BOSWELL_DEFAULT_MAX_TIME", "40")
+
+        result = load_config_from_env()
+
+        assert result["default_target_time"] == 20
+        assert result["default_max_time"] == 40
+
+    def test_load_config_from_env_invalid_numeric_ignored(self, monkeypatch):
+        """Test load_config_from_env ignores invalid numeric values."""
+        monkeypatch.setenv("BOSWELL_DEFAULT_TARGET_TIME", "not-a-number")
+
+        result = load_config_from_env()
+
+        assert "default_target_time" not in result
+
+    def test_load_config_env_overrides_file(self, monkeypatch, tmp_path):
+        """Test that environment variables override config file values."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        # Create config file with one value
+        config_dir = tmp_path / ".boswell"
+        config_dir.mkdir()
+        config_data = {
+            "claude_api_key": "sk-from-file",
+            "elevenlabs_api_key": "el-from-file",
+            "deepgram_api_key": "",
+            "meetingbaas_api_key": "",
+            "meeting_provider": "google_meet",
+            "default_target_time": 30,
+            "default_max_time": 45,
+        }
+        (config_dir / "config.json").write_text(json.dumps(config_data))
+
+        # Set env var to override
+        monkeypatch.setenv("CLAUDE_API_KEY", "sk-from-env")
+
+        config = load_config()
+
+        # Env var should override file
+        assert config.claude_api_key == "sk-from-env"
+        # File value should remain for non-overridden keys
+        assert config.elevenlabs_api_key == "el-from-file"
+
+    def test_load_config_env_only_no_file(self, monkeypatch, tmp_path):
+        """Test load_config works with only env vars, no config file."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setenv("CLAUDE_API_KEY", "sk-env-only")
+        monkeypatch.setenv("MEETINGBAAS_API_KEY", "mb-env-only")
+
+        config = load_config()
+
+        assert config is not None
+        assert config.claude_api_key == "sk-env-only"
+        assert config.meetingbaas_api_key == "mb-env-only"
+        # Defaults for non-set values
+        assert config.elevenlabs_api_key == ""
+        assert config.default_target_time == 30
+
+    def test_load_config_none_when_no_file_and_no_env(self, monkeypatch, tmp_path):
+        """Test load_config returns None when no config file and no env vars."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        # Clear all env vars
+        for env_var in [
+            "CLAUDE_API_KEY",
+            "ELEVENLABS_API_KEY",
+            "DEEPGRAM_API_KEY",
+            "MEETINGBAAS_API_KEY",
+            "BOSWELL_MEETING_PROVIDER",
+            "BOSWELL_DEFAULT_TARGET_TIME",
+            "BOSWELL_DEFAULT_MAX_TIME",
+        ]:
+            monkeypatch.delenv(env_var, raising=False)
+
+        config = load_config()
+
+        assert config is None
