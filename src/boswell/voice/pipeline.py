@@ -16,6 +16,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from boswell.config import load_config
 from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
 from boswell.voice.acknowledgment import AcknowledgmentProcessor
+from boswell.voice.speed_control import SpeedControlProcessor
 
 
 async def create_pipeline(
@@ -112,8 +113,11 @@ async def create_pipeline(
     # Set up immediate acknowledgment for reduced perceived latency
     acknowledgment_processor = AcknowledgmentProcessor()
 
+    # Set up dynamic speed control (processes [SPEED:x] tags from LLM)
+    speed_control_processor = SpeedControlProcessor(tts)
+
     # Build the pipeline
-    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> bot_collector -> tts -> output
+    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> speed -> bot_collector -> tts -> output
     pipeline = Pipeline(
         [
             transport.input(),
@@ -122,6 +126,7 @@ async def create_pipeline(
             acknowledgment_processor,  # Immediate filler acknowledgment
             context_aggregator.user(),
             llm,
+            speed_control_processor,  # Process speed tags and adjust TTS
             bot_response_collector,  # Capture bot responses after LLM
             tts,
             transport.output(),
