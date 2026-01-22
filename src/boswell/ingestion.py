@@ -160,7 +160,13 @@ def fetch_url(url: str) -> str:
 
     Raises:
         httpx.HTTPError: If the request fails.
+        ValueError: If the URL scheme is not http or https.
     """
+    # Validate URL scheme to prevent SSRF attacks
+    parsed = url.lower()
+    if not (parsed.startswith("http://") or parsed.startswith("https://")):
+        raise ValueError(f"Invalid URL scheme. Only http:// and https:// are allowed: {url}")
+
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         response = client.get(url, headers={"User-Agent": "Boswell/1.0"})
         response.raise_for_status()
