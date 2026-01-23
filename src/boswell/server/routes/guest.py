@@ -386,6 +386,42 @@ async def interview_rejoin(
     )
 
 
+@router.post("/i/{magic_token}/reset")
+async def reset_interview(
+    request: Request,
+    magic_token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Reset an interview to start over.
+
+    Clears room_name, room_token, and resets status to invited.
+    """
+    # Fetch interview
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.magic_token == magic_token)
+    )
+    interview = result.scalar_one_or_none()
+
+    if not interview:
+        return RedirectResponse(url=f"/i/{magic_token}", status_code=303)
+
+    # Only allow reset if not completed
+    if interview.status == InterviewStatus.completed:
+        return RedirectResponse(url=f"/i/{magic_token}/thankyou", status_code=303)
+
+    # Reset interview state
+    interview.status = InterviewStatus.invited
+    interview.room_name = None
+    interview.room_token = None
+    interview.started_at = None
+
+    await db.commit()
+
+    # Redirect to landing page
+    return RedirectResponse(url=f"/i/{magic_token}", status_code=303)
+
+
 @router.get("/i/{magic_token}/thankyou", response_class=HTMLResponse)
 async def interview_thankyou(
     request: Request,

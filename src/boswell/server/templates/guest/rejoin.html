@@ -16,7 +16,9 @@
         <a href="/i/{{ interview.magic_token }}/room" class="btn" style="width: 100%; display: block; text-align: center;">Rejoin Interview</a>
 
         <div class="text-center" style="margin-top: 1.5rem;">
-            <a href="/i/{{ interview.magic_token }}" class="text-muted" style="font-size: 0.875rem;">Start Over</a>
+            <form method="post" action="/i/{{ interview.magic_token }}/reset" style="display: inline;">
+                <button type="submit" class="text-muted" style="font-size: 0.875rem; background: none; border: none; cursor: pointer; text-decoration: underline;">Start Over</button>
+            </form>
         </div>
     </div>
 </div>
