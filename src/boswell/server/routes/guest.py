@@ -251,3 +251,70 @@ async def interview_room(
             "room_url": room_url,
         },
     )
+
+
+@router.get("/i/{magic_token}/rejoin", response_class=HTMLResponse)
+async def guest_rejoin(
+    request: Request,
+    magic_token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Show rejoin page for guests who have started but left.
+
+    Only accessible if guest.status == "started" and room_name exists.
+    """
+    # Fetch guest with interview relationship
+    result = await db.execute(
+        select(Guest)
+        .options(selectinload(Guest.interview))
+        .where(Guest.magic_token == magic_token)
+    )
+    guest = result.scalar_one_or_none()
+
+    # Not found
+    if not guest:
+        return templates.TemplateResponse(
+            request=request,
+            name="guest/landing.html",
+            context={"error": "Interview not found."},
+            status_code=404,
+        )
+
+    # Check if expired (by status or expires_at)
+    now = datetime.now(timezone.utc)
+    is_expired = (
+        guest.status == GuestStatus.expired
+        or (guest.expires_at and guest.expires_at < now)
+    )
+
+    if is_expired:
+        return templates.TemplateResponse(
+            request=request,
+            name="guest/landing.html",
+            context={"error": "This interview link has expired."},
+            status_code=404,
+        )
+
+    # Completed - redirect to thank you page
+    if guest.status == GuestStatus.completed:
+        return RedirectResponse(
+            url=f"/i/{magic_token}/thankyou",
+            status_code=303,
+        )
+
+    # Not started or no room - redirect to landing page
+    if guest.status != GuestStatus.started or not guest.room_name:
+        return RedirectResponse(
+            url=f"/i/{magic_token}",
+            status_code=303,
+        )
+
+    # Show rejoin page
+    return templates.TemplateResponse(
+        request=request,
+        name="guest/rejoin.html",
+        context={
+            "interview": guest.interview,
+            "guest": guest,
+        },
+    )
