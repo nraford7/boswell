@@ -35,7 +35,6 @@ class TranscriptEntry:
         return result
 
 
-@dataclass
 class TranscriptCollector(FrameProcessor):
     """Collects transcript entries from the Pipecat pipeline.
 
@@ -44,9 +43,11 @@ class TranscriptCollector(FrameProcessor):
     - TextFrame: Bot responses (from Claude via TTS)
     """
 
-    entries: list[TranscriptEntry] = field(default_factory=list)
-    _current_bot_text: str = ""
-    _last_guest_text: str = ""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.entries: list[TranscriptEntry] = []
+        self._current_bot_text: str = ""
+        self._last_guest_text: str = ""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Process frames and capture transcript entries."""
