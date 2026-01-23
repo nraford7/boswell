@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 DAILY_API_URL = "https://api.daily.co/v1"
 
 
-async def create_daily_room(interview_id: str) -> dict:
+async def create_daily_room(interview_id: str, guest_name: str = "Guest") -> dict:
     """Create a Daily.co room for the interview.
 
     Args:
         interview_id: The interview's UUID as a string.
+        guest_name: The name to display for the guest in the room.
 
     Returns:
         dict with room_name, room_url, and room_token.
@@ -81,7 +82,7 @@ async def create_daily_room(interview_id: str) -> dict:
                 "properties": {
                     "room_name": room_name,
                     "is_owner": False,
-                    "user_name": "Guest",
+                    "user_name": guest_name,
                 },
             },
         )
@@ -232,7 +233,7 @@ async def start_interview(
         )
 
     # Create Daily.co room
-    room_info = await create_daily_room(str(interview.id))
+    room_info = await create_daily_room(str(interview.id), interview.name)
 
     # Update interview record
     interview.status = InterviewStatus.started
