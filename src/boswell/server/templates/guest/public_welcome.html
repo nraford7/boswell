@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Join Interview - {{ project.topic }}{% endblock %}
+
+{% block head %}
+<style>
+    .welcome-container {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+    }
+
+    .welcome-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2.5rem;
+        text-align: center;
+    }
+
+    .welcome-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.5rem;
+        background: var(--accent-subtle);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .welcome-icon svg {
+        width: 32px;
+        height: 32px;
+        color: var(--accent);
+    }
+
+    .welcome-title {
+        font-family: var(--font-display);
+        font-size: 1.75rem;
+        font-weight: 400;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .welcome-topic {
+        color: var(--accent);
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .welcome-description {
+        color: var(--fg-muted);
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+    }
+
+    .name-form {
+        text-align: left;
+    }
+
+    .name-form label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--fg-muted);
+        margin-bottom: 0.5rem;
+    }
+
+    .name-form input[type="text"] {
+        width: 100%;
+        font-size: 1.125rem;
+        padding: 0.875rem 1rem;
+        text-align: center;
+    }
+
+    .name-form button {
+        width: 100%;
+        margin-top: 1.5rem;
+        padding: 1rem;
+        font-size: 1rem;
+    }
+
+    .duration-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        background: var(--bg-surface);
+        padding: 0.375rem 0.75rem;
+        border-radius: var(--radius-full);
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+        margin-bottom: 1.5rem;
+    }
+
+    .duration-badge svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .terms-text {
+        font-size: 0.75rem;
+        color: var(--fg-dim);
+        margin-top: 1.5rem;
+        line-height: 1.5;
+    }
+
+    .terms-text a {
+        color: var(--accent);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="welcome-container">
+    <div class="welcome-card">
+        <div class="welcome-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+        </div>
+
+        <h1 class="welcome-title">Welcome to Boswell</h1>
+        <p class="welcome-topic">{{ project.topic }}</p>
+
+        <div class="duration-badge">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            ~{{ project.target_minutes }} minutes
+        </div>
+
+        <p class="welcome-description">
+            You're about to have a voice conversation with Boswell, an AI research interviewer.
+            Please enter your name to begin.
+        </p>
+
+        <form method="post" action="/join/{{ token }}/start" class="name-form">
+            <label for="guest_name">Your Name</label>
+            <input type="text" id="guest_name" name="guest_name"
+                   placeholder="Enter your name"
+                   required
+                   minlength="2"
+                   maxlength="100"
+                   autofocus>
+            <button type="submit" class="btn">Start Interview</button>
+        </form>
+
+        <p class="terms-text">
+            By continuing, you agree to have your responses recorded and transcribed
+            for research purposes.
+        </p>
+    </div>
+</div>
+{% endblock %}
