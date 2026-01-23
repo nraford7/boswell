@@ -154,7 +154,7 @@ class Interview(Base):
         "interview_id",  # Keep column name to avoid migration
         ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False
     )
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     bio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     magic_token: Mapped[str] = mapped_column(
