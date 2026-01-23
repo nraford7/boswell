@@ -1,0 +1,46 @@
+# Boswell Voice Worker Dockerfile
+FROM python:3.11-slim as builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libffi-dev && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+
+RUN pip install --upgrade pip && \
+    pip wheel --no-deps --wheel-dir /app/wheels . && \
+    pip wheel --wheel-dir /app/wheels .[server,voice]
+
+FROM python:3.11-slim as runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 libsndfile1 && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/wheels /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+
+COPY src/ ./src/
+COPY alembic.ini ./
+COPY scripts/ ./scripts/
+
+RUN chmod +x ./scripts/*.sh
+
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Worker runs the voice worker, not the web server
+CMD ["./scripts/start_worker.sh"]
