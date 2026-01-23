@@ -1,10 +1,13 @@
 # src/boswell/server/routes/admin.py
 """Admin routes for dashboard and interview management."""
 
+import csv
+import io
+import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +17,8 @@ from boswell.server.database import get_session
 from boswell.server.main import templates
 from boswell.server.models import Guest, GuestStatus, Interview, InterviewTemplate, User
 from boswell.server.routes.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin")
 
@@ -398,3 +403,378 @@ async def template_delete(
     await db.flush()
 
     return RedirectResponse(url="/admin/templates", status_code=303)
+
+
+# -----------------------------------------------------------------------------
+# Guest Invite Routes
+# -----------------------------------------------------------------------------
+
+
+def parse_guest_csv(
+    file_content: str,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Parse CSV content for guest import.
+
+    Args:
+        file_content: The CSV file content as a string.
+
+    Returns:
+        A tuple of (valid_rows, errors) where valid_rows is a list of dicts
+        with 'email' and 'name' keys, and errors is a list of error messages.
+    """
+    valid_rows = []
+    errors = []
+
+    reader = csv.DictReader(io.StringIO(file_content))
+
+    # Check for required 'email' column
+    if reader.fieldnames is None or "email" not in reader.fieldnames:
+        return [], ["CSV must have an 'email' column"]
+
+    for row_num, row in enumerate(reader, start=2):  # Start at 2 to account for header
+        email = row.get("email", "").strip()
+        name = row.get("name", "").strip()
+
+        if not email:
+            errors.append(f"Row {row_num}: Missing email")
+            continue
+
+        # Basic email validation
+        if "@" not in email or "." not in email:
+            errors.append(f"Row {row_num}: Invalid email '{email}'")
+            continue
+
+        # Use email prefix as name if not provided
+        if not name:
+            name = email.split("@")[0]
+
+        valid_rows.append({"email": email, "name": name})
+
+    return valid_rows, errors
+
+
+@router.get("/interviews/{interview_id}/invite")
+async def invite_form(
+    request: Request,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the invite guest form for an interview."""
+    # Fetch interview
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id == interview_id)
+        .where(Interview.team_id == user.team_id)
+    )
+    interview = result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/invite.html",
+        context={
+            "user": user,
+            "interview": interview,
+        },
+    )
+
+
+@router.post("/interviews/{interview_id}/invite")
+async def invite_submit(
+    request: Request,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    email: Optional[str] = Form(None),
+    name: Optional[str] = Form(None),
+    csv_file: Optional[UploadFile] = File(None),
+    db: AsyncSession = Depends(get_session),
+):
+    """Invite guest(s) to an interview.
+
+    Accepts either:
+    - Single invite: email (required), name (optional)
+    - CSV upload: file with email (required), name (optional) columns
+    """
+    # Fetch interview
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id == interview_id)
+        .where(Interview.team_id == user.team_id)
+    )
+    interview = result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    guests_created = 0
+    errors = []
+
+    # Check if CSV was uploaded
+    if csv_file and csv_file.filename:
+        # Read and parse CSV
+        content = await csv_file.read()
+        try:
+            csv_text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="CSV file must be UTF-8 encoded")
+
+        valid_rows, parse_errors = parse_guest_csv(csv_text)
+        errors.extend(parse_errors)
+
+        # Create guests from valid rows
+        for row in valid_rows:
+            guest = Guest(
+                interview_id=interview_id,
+                email=row["email"],
+                name=row["name"],
+            )
+            db.add(guest)
+            guests_created += 1
+
+        if errors:
+            logger.warning(
+                f"CSV import for interview {interview_id} had {len(errors)} errors: {errors}"
+            )
+
+    elif email:
+        # Single invite
+        email = email.strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+
+        # Basic email validation
+        if "@" not in email or "." not in email:
+            raise HTTPException(status_code=400, detail="Invalid email address")
+
+        # Use email prefix as name if not provided
+        guest_name = name.strip() if name else email.split("@")[0]
+
+        guest = Guest(
+            interview_id=interview_id,
+            email=email,
+            name=guest_name,
+        )
+        db.add(guest)
+        guests_created += 1
+
+    else:
+        raise HTTPException(
+            status_code=400, detail="Either email or CSV file is required"
+        )
+
+    await db.flush()
+
+    return RedirectResponse(
+        url=f"/admin/interviews/{interview_id}",
+        status_code=303,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Bulk Import Routes
+# -----------------------------------------------------------------------------
+
+
+def parse_bulk_csv(
+    file_content: str,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Parse CSV content for bulk interview/guest import.
+
+    Args:
+        file_content: The CSV file content as a string.
+
+    Returns:
+        A tuple of (valid_rows, errors) where valid_rows is a list of dicts
+        with 'email', 'name', and optionally 'interview_topic' or 'interview_id' keys.
+    """
+    valid_rows = []
+    errors = []
+
+    reader = csv.DictReader(io.StringIO(file_content))
+
+    # Check for required 'email' column
+    if reader.fieldnames is None or "email" not in reader.fieldnames:
+        return [], ["CSV must have an 'email' column"]
+
+    has_topic = "interview_topic" in (reader.fieldnames or [])
+    has_id = "interview_id" in (reader.fieldnames or [])
+
+    for row_num, row in enumerate(reader, start=2):
+        email = row.get("email", "").strip()
+        name = row.get("name", "").strip()
+        interview_topic = row.get("interview_topic", "").strip()
+        interview_id = row.get("interview_id", "").strip()
+
+        if not email:
+            errors.append(f"Row {row_num}: Missing email")
+            continue
+
+        # Basic email validation
+        if "@" not in email or "." not in email:
+            errors.append(f"Row {row_num}: Invalid email '{email}'")
+            continue
+
+        # Use email prefix as name if not provided
+        if not name:
+            name = email.split("@")[0]
+
+        # Validate interview_id if provided
+        if interview_id:
+            try:
+                UUID(interview_id)
+            except ValueError:
+                errors.append(f"Row {row_num}: Invalid interview_id '{interview_id}'")
+                continue
+
+        valid_rows.append({
+            "email": email,
+            "name": name,
+            "interview_topic": interview_topic,
+            "interview_id": interview_id,
+        })
+
+    return valid_rows, errors
+
+
+@router.get("/bulk")
+async def bulk_import_form(
+    request: Request,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the bulk import form."""
+    # Fetch templates for the user's team
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    interview_templates = result.scalars().all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/bulk_import.html",
+        context={
+            "user": user,
+            "templates": interview_templates,
+        },
+    )
+
+
+@router.post("/bulk")
+async def bulk_import_submit(
+    request: Request,
+    user: User = Depends(require_auth),
+    csv_file: UploadFile = File(...),
+    template_id: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session),
+):
+    """Process bulk import of interviews and guests from CSV.
+
+    CSV columns:
+    - email (required): Guest email address
+    - name (optional): Guest name (uses email prefix if not provided)
+    - interview_topic (optional): Creates a new interview with this topic
+    - interview_id (optional): Adds guest to existing interview
+    """
+    # Parse template_id if provided
+    parsed_template_id: Optional[UUID] = None
+    if template_id and template_id.strip():
+        try:
+            parsed_template_id = UUID(template_id)
+            # Verify the template belongs to the user's team
+            result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == parsed_template_id)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            if result.scalar_one_or_none() is None:
+                raise HTTPException(status_code=400, detail="Invalid template")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    # Read and parse CSV
+    content = await csv_file.read()
+    try:
+        csv_text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV file must be UTF-8 encoded")
+
+    valid_rows, parse_errors = parse_bulk_csv(csv_text)
+
+    if parse_errors:
+        logger.warning(f"Bulk import had {len(parse_errors)} errors: {parse_errors}")
+
+    if not valid_rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid rows found in CSV. " + "; ".join(parse_errors[:5]),
+        )
+
+    # Track created interviews by topic to avoid duplicates
+    topic_to_interview: dict[str, Interview] = {}
+    interviews_created = 0
+    guests_created = 0
+
+    for row in valid_rows:
+        interview_id = None
+
+        # Determine which interview to add the guest to
+        if row["interview_id"]:
+            # Use existing interview
+            interview_id = UUID(row["interview_id"])
+            # Verify interview belongs to user's team
+            result = await db.execute(
+                select(Interview)
+                .where(Interview.id == interview_id)
+                .where(Interview.team_id == user.team_id)
+            )
+            if result.scalar_one_or_none() is None:
+                logger.warning(
+                    f"Skipping row: interview {interview_id} not found or not accessible"
+                )
+                continue
+
+        elif row["interview_topic"]:
+            # Create new interview or reuse one with same topic
+            topic = row["interview_topic"]
+            if topic in topic_to_interview:
+                interview_id = topic_to_interview[topic].id
+            else:
+                interview = Interview(
+                    team_id=user.team_id,
+                    template_id=parsed_template_id,
+                    topic=topic,
+                    target_minutes=30,
+                    created_by=user.id,
+                )
+                db.add(interview)
+                await db.flush()
+                topic_to_interview[topic] = interview
+                interview_id = interview.id
+                interviews_created += 1
+        else:
+            logger.warning(
+                f"Skipping row: no interview_topic or interview_id provided for {row['email']}"
+            )
+            continue
+
+        # Create guest
+        guest = Guest(
+            interview_id=interview_id,
+            email=row["email"],
+            name=row["name"],
+        )
+        db.add(guest)
+        guests_created += 1
+
+    await db.flush()
+
+    logger.info(
+        f"Bulk import complete: {interviews_created} interviews, {guests_created} guests created"
+    )
+
+    return RedirectResponse(url="/admin/", status_code=303)

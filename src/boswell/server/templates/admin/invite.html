@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Invite Guest - {{ interview.topic }} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+    }
+
+    .back-link:hover {
+        color: var(--primary);
+    }
+
+    .back-link svg {
+        margin-right: 0.25rem;
+    }
+
+    .form-section {
+        margin-bottom: 2rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .form-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .section-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+
+    .or-divider {
+        display: flex;
+        align-items: center;
+        margin: 1.5rem 0;
+        color: var(--muted);
+    }
+
+    .or-divider::before,
+    .or-divider::after {
+        content: "";
+        flex: 1;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .or-divider span {
+        padding: 0 1rem;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+    }
+
+    .file-input-wrapper {
+        position: relative;
+    }
+
+    .file-input-wrapper input[type="file"] {
+        padding: 0.75rem;
+    }
+
+    .help-text {
+        font-size: 0.875rem;
+        color: var(--muted);
+        margin-top: 0.5rem;
+    }
+
+    .csv-format {
+        background-color: var(--bg);
+        padding: 1rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell</a>
+        <div class="nav-links">
+            <a href="/admin/">Dashboard</a>
+            <a href="/admin/templates">Templates</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="padding-top: 2rem;">
+    <a href="/admin/interviews/{{ interview.id }}" class="back-link">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+        </svg>
+        Back to Interview
+    </a>
+
+    <h1 style="margin-bottom: 0.5rem;">Invite Guests</h1>
+    <p class="text-muted mb-4">{{ interview.topic }}</p>
+
+    <div class="card" style="max-width: 600px;">
+        <!-- Single Invite Form -->
+        <div class="form-section">
+            <h3 class="section-title">Invite a Single Guest</h3>
+            <form method="post" action="/admin/interviews/{{ interview.id }}/invite">
+                <div class="mb-4">
+                    <label for="email" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Email *</label>
+                    <input type="email" id="email" name="email" placeholder="guest@example.com">
+                </div>
+
+                <div class="mb-4">
+                    <label for="name" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Name</label>
+                    <input type="text" id="name" name="name" placeholder="John Doe">
+                    <p class="help-text">Optional. If not provided, the email prefix will be used.</p>
+                </div>
+
+                <button type="submit" class="btn" style="width: 100%;">Send Invite</button>
+            </form>
+        </div>
+
+        <div class="or-divider">
+            <span>or</span>
+        </div>
+
+        <!-- CSV Upload Form -->
+        <div class="form-section">
+            <h3 class="section-title">Import Multiple Guests from CSV</h3>
+            <form method="post" action="/admin/interviews/{{ interview.id }}/invite" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label for="csv_file" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">CSV File</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="csv_file" name="csv_file" accept=".csv">
+                    </div>
+                    <p class="help-text">Upload a CSV file with guest information.</p>
+                </div>
+
+                <div class="mb-4">
+                    <p style="font-weight: 500; margin-bottom: 0.5rem;">Required CSV Format:</p>
+                    <div class="csv-format">
+                        email,name<br>
+                        guest1@example.com,John Doe<br>
+                        guest2@example.com,Jane Smith
+                    </div>
+                    <p class="help-text">
+                        <strong>email</strong> (required): Guest's email address<br>
+                        <strong>name</strong> (optional): Guest's display name
+                    </p>
+                </div>
+
+                <button type="submit" class="btn" style="width: 100%;">Import Guests</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
