@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Boswell{% endblock %}
+{% block title %}Projects - Boswell{% endblock %}
 
 {% block head %}
 <style>
@@ -23,192 +23,145 @@
         color: var(--accent);
     }
 
-    .stats-grid {
+    .projects-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-bottom: 2rem;
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 1.5rem;
     }
 
-    .stat-card {
+    .project-card {
         background: var(--bg-elevated);
         border: 1px solid var(--border);
-        border-radius: var(--radius-md);
+        border-radius: var(--radius-lg);
         padding: 1.5rem;
         position: relative;
         overflow: hidden;
+        transition: all var(--transition-fast);
+        text-decoration: none;
+        display: block;
     }
 
-    .stat-card::before {
+    .project-card::before {
         content: '';
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
-        height: 2px;
+        height: 3px;
         background: linear-gradient(90deg, var(--accent), transparent);
+        opacity: 0.5;
+        transition: opacity var(--transition-fast);
     }
 
-    .stat-label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--fg-dim);
+    .project-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+    }
+
+    .project-card:hover::before {
+        opacity: 1;
+    }
+
+    .project-topic {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--fg);
         margin-bottom: 0.5rem;
+        line-height: 1.3;
+    }
+
+    .project-meta {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+        margin-bottom: 1.25rem;
+    }
+
+    .project-stats {
+        display: flex;
+        gap: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .project-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
     }
 
     .stat-value {
         font-family: var(--font-display);
-        font-size: 2.5rem;
+        font-size: 1.5rem;
         font-weight: 500;
         color: var(--fg);
         line-height: 1;
     }
 
-    /* Filter/Search Bar */
-    .toolbar {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        flex-wrap: wrap;
-    }
-
-    .search-box {
-        position: relative;
-        flex: 1;
-        min-width: 200px;
-        max-width: 300px;
-    }
-
-    .search-box input {
-        padding-left: 2.5rem;
-        height: 40px;
-    }
-
-    .search-box svg {
-        position: absolute;
-        left: 0.875rem;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 16px;
-        height: 16px;
-        color: var(--fg-dim);
-        pointer-events: none;
-    }
-
-    .filter-group {
-        display: flex;
-        gap: 0.5rem;
-    }
-
-    .filter-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--fg-muted);
-        cursor: pointer;
-        transition: all var(--transition-fast);
-    }
-
-    .filter-btn:hover {
-        border-color: var(--accent);
-        color: var(--accent);
-    }
-
-    .filter-btn.active {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: var(--bg-deep);
-    }
-
-    /* Guest Table */
-    .guests-table {
-        width: 100%;
-    }
-
-    .guests-table td {
-        vertical-align: middle;
-    }
-
-    .guest-name {
-        font-weight: 500;
-        color: var(--fg);
-    }
-
-    .guest-email {
-        font-size: 0.8125rem;
+    .stat-label {
+        font-size: 0.6875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
         color: var(--fg-dim);
     }
 
-    .topic-link {
-        color: var(--fg-muted);
-        text-decoration: none;
-        transition: color var(--transition-fast);
+    .stat-value.completed {
+        color: var(--success);
     }
 
-    .topic-link:hover {
+    .stat-value.pending {
         color: var(--accent);
     }
 
     .empty-state {
         text-align: center;
-        padding: 4rem 2rem;
+        padding: 6rem 2rem;
     }
 
     .empty-state-icon {
-        width: 64px;
-        height: 64px;
+        width: 80px;
+        height: 80px;
         margin: 0 auto 1.5rem;
-        opacity: 0.3;
+        opacity: 0.2;
     }
 
     .empty-state h3 {
         font-family: var(--font-display);
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
+        font-size: 1.75rem;
+        margin-bottom: 0.75rem;
         color: var(--fg);
     }
 
     .empty-state p {
         color: var(--fg-dim);
-        margin-bottom: 1.5rem;
+        margin-bottom: 2rem;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
-    /* Animate rows on load */
-    .guests-table tbody tr {
+    /* Animate cards on load */
+    .project-card {
         animation: fadeIn 0.4s ease forwards;
         opacity: 0;
     }
 
-    .guests-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
-    .guests-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
-    .guests-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
-    .guests-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
-    .guests-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
-    .guests-table tbody tr:nth-child(6) { animation-delay: 0.3s; }
-    .guests-table tbody tr:nth-child(7) { animation-delay: 0.35s; }
-    .guests-table tbody tr:nth-child(8) { animation-delay: 0.4s; }
-    .guests-table tbody tr:nth-child(9) { animation-delay: 0.45s; }
-    .guests-table tbody tr:nth-child(10) { animation-delay: 0.5s; }
-
-    /* Hidden rows for filtering */
-    .guests-table tbody tr.hidden {
-        display: none;
-    }
+    .project-card:nth-child(1) { animation-delay: 0.05s; }
+    .project-card:nth-child(2) { animation-delay: 0.1s; }
+    .project-card:nth-child(3) { animation-delay: 0.15s; }
+    .project-card:nth-child(4) { animation-delay: 0.2s; }
+    .project-card:nth-child(5) { animation-delay: 0.25s; }
+    .project-card:nth-child(6) { animation-delay: 0.3s; }
 </style>
 {% endblock %}
 
 {% block body %}
 <nav class="nav">
     <div class="nav-content">
-        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <a href="/admin/" class="nav-brand">Boswell</a>
         <div class="nav-links">
-            <a href="/admin/">Dashboard</a>
+            <a href="/admin/" class="active">Projects</a>
             <a href="/admin/templates">Interview Types</a>
-            <a href="/admin/bulk">Bulk Upload</a>
             <span class="text-muted">{{ user.name }}</span>
             <form method="post" action="/admin/logout" style="display: inline;">
                 <button type="submit" class="btn-ghost">Logout</button>
@@ -219,7 +172,7 @@
 
 <div class="container">
     <div class="page-header">
-        <h1 class="page-title">Welcome back, <span>{{ user.name }}</span></h1>
+        <h1 class="page-title">Your <span>Projects</span></h1>
         <a href="/admin/projects/new" class="btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
@@ -228,136 +181,43 @@
         </a>
     </div>
 
-    {% set all_interviews = [] %}
-    {% for project in projects %}
-        {% for interview in project.interviews %}
-            {% set _ = all_interviews.append({'interview': interview, 'project': project}) %}
-        {% endfor %}
-    {% endfor %}
-
-    {% set invitations_sent = all_interviews|length %}
-    {% set interviews_complete = all_interviews|selectattr('interview.status.value', 'equalto', 'completed')|list|length %}
-    {% set interviews_pending = invitations_sent - interviews_complete %}
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label">Invitations Sent</div>
-            <div class="stat-value">{{ invitations_sent }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Interviews Complete</div>
-            <div class="stat-value">{{ interviews_complete }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Interviews Pending</div>
-            <div class="stat-value">{{ interviews_pending }}</div>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="section-header" style="margin-bottom: 1.5rem;">
-            <h2>Interviews</h2>
-            <div class="toolbar">
-                <div class="search-box">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input type="text" id="searchInput" placeholder="Search by name or topic..." oninput="filterTable()">
+    {% if projects %}
+    <div class="projects-grid">
+        {% for project in projects %}
+        {% set total_interviews = project.interviews|length %}
+        {% set completed = project.interviews|selectattr('status.value', 'equalto', 'completed')|list|length %}
+        {% set pending = total_interviews - completed %}
+        <a href="/admin/projects/{{ project.id }}" class="project-card">
+            <div class="project-topic">{{ project.topic }}</div>
+            <div class="project-meta">
+                {{ project.target_minutes }} min &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
+            </div>
+            <div class="project-stats">
+                <div class="project-stat">
+                    <span class="stat-value">{{ total_interviews }}</span>
+                    <span class="stat-label">Interviews</span>
                 </div>
-                <div class="filter-group">
-                    <button type="button" class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
-                    <button type="button" class="filter-btn" data-filter="completed" onclick="setFilter('completed')">Completed</button>
-                    <button type="button" class="filter-btn" data-filter="started" onclick="setFilter('started')">In Progress</button>
-                    <button type="button" class="filter-btn" data-filter="invited" onclick="setFilter('invited')">Invited</button>
+                <div class="project-stat">
+                    <span class="stat-value completed">{{ completed }}</span>
+                    <span class="stat-label">Completed</span>
+                </div>
+                <div class="project-stat">
+                    <span class="stat-value pending">{{ pending }}</span>
+                    <span class="stat-label">Pending</span>
                 </div>
             </div>
-        </div>
-
-        {% if all_interviews %}
-        <table class="guests-table" id="guestsTable">
-            <thead>
-                <tr>
-                    <th>Interviewee</th>
-                    <th>Project</th>
-                    <th>Status</th>
-                    <th>Invited</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in all_interviews %}
-                <tr data-status="{{ item.interview.status.value }}" data-name="{{ item.interview.name|lower }}" data-topic="{{ item.project.topic|lower }}">
-                    <td>
-                        <div class="guest-name">{{ item.interview.name }}</div>
-                        <div class="guest-email">{{ item.interview.email }}</div>
-                    </td>
-                    <td>
-                        <a href="/admin/projects/{{ item.project.id }}" class="topic-link">{{ item.project.topic }}</a>
-                    </td>
-                    <td>
-                        <span class="badge badge-{{ item.interview.status.value }}">{{ item.interview.status.value }}</span>
-                    </td>
-                    <td class="text-muted">{{ item.interview.invited_at.strftime('%b %d, %Y') if item.interview.invited_at else '-' }}</td>
-                    <td style="text-align: right;">
-                        <a href="/admin/projects/{{ item.project.id }}" class="btn btn-outline btn-sm">View</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">
-            <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <h3>No projects yet</h3>
-            <p>Create your first project to start gathering insights.</p>
-            <a href="/admin/projects/new" class="btn">New Project</a>
-        </div>
-        {% endif %}
+        </a>
+        {% endfor %}
     </div>
+    {% else %}
+    <div class="empty-state">
+        <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+        <h3>No projects yet</h3>
+        <p>Projects help you organize interviews around a specific topic or research question.</p>
+        <a href="/admin/projects/new" class="btn">Create Your First Project</a>
+    </div>
+    {% endif %}
 </div>
-
-<script>
-let currentFilter = 'all';
-
-function setFilter(filter) {
-    currentFilter = filter;
-
-    // Update active button
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.filter === filter) {
-            btn.classList.add('active');
-        }
-    });
-
-    filterTable();
-}
-
-function filterTable() {
-    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-    const rows = document.querySelectorAll('#guestsTable tbody tr');
-
-    rows.forEach(row => {
-        const status = row.dataset.status;
-        const name = row.dataset.name;
-        const topic = row.dataset.topic;
-
-        // Check filter
-        let passesFilter = currentFilter === 'all' || status === currentFilter;
-
-        // Check search
-        let passesSearch = !searchTerm ||
-            name.includes(searchTerm) ||
-            topic.includes(searchTerm);
-
-        if (passesFilter && passesSearch) {
-            row.classList.remove('hidden');
-        } else {
-            row.classList.add('hidden');
-        }
-    });
-}
-</script>
 {% endblock %}
