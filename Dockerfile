@@ -1,5 +1,6 @@
 # Boswell AI Research Interviewer
 # Multi-stage Dockerfile for web server and voice worker
+# v2 - Using entrypoint with SERVICE_TYPE
 #
 # Usage:
 #   Web service:    docker run -e ... boswell ./scripts/start_web.sh
