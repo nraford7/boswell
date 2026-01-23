@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Interview: {{ interview.topic }} - Boswell{% endblock %}
+
+{% block body %}
+<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+    <div class="card" style="max-width: 600px; width: 100%;">
+        <h1 class="mb-4">{{ interview.topic }}</h1>
+        <p class="text-muted mb-4">This interview will take approximately {{ interview.target_minutes }} minutes.</p>
+
+        <div class="mb-4">
+            <h3 class="mb-2">Before you begin</h3>
+            <ul style="padding-left: 1.5rem; color: var(--muted);">
+                <li class="mb-2"><strong>Privacy:</strong> Your responses will be recorded and analyzed to help with research.</li>
+                <li class="mb-2"><strong>Transcript:</strong> A full transcript of the conversation will be saved.</li>
+                <li class="mb-2"><strong>"Forget that":</strong> If you say something you'd like removed, just say "forget that" and it will be excluded from the final transcript.</li>
+            </ul>
+        </div>
+
+        <form method="post" action="/i/{{ guest.magic_token }}/start">
+            <button type="submit" class="btn" style="width: 100%;">Start Interview</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
