@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.main import templates
-from boswell.server.models import Interview, InterviewStatus
+from boswell.server.models import Interview, InterviewStatus, Project
 
 logger = logging.getLogger(__name__)
 
@@ -458,4 +458,87 @@ async def interview_thankyou(
             "project": interview.project,
             "interview": interview,
         },
+    )
+
+
+@router.get("/join/{token}")
+async def public_join_landing(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Landing page for public/generic interview links.
+
+    Shows a welcome screen where guest enters their name.
+    """
+    # Find project by public_link_token
+    result = await db.execute(
+        select(Project).where(Project.public_link_token == token)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Interview link not found")
+
+    return templates.TemplateResponse(
+        "guest/public_welcome.html",
+        {
+            "request": request,
+            "project": project,
+            "token": token,
+        },
+    )
+
+
+@router.post("/join/{token}/start")
+async def start_public_interview(
+    request: Request,
+    token: str,
+    guest_name: str = Form(...),
+    db: AsyncSession = Depends(get_session),
+):
+    """Start an interview from a public link.
+
+    Creates a new Interview record, Daily.co room, and redirects to room.
+    """
+    # Validate guest name
+    guest_name = guest_name.strip()
+    if not guest_name or len(guest_name) < 2:
+        raise HTTPException(status_code=400, detail="Please enter your name")
+
+    if len(guest_name) > 100:
+        guest_name = guest_name[:100]
+
+    # Find project by public_link_token
+    result = await db.execute(
+        select(Project).where(Project.public_link_token == token)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Interview link not found")
+
+    # Create new Interview record
+    interview = Interview(
+        project_id=project.id,
+        name=guest_name,
+        email=None,  # No email for public interviews
+        status=InterviewStatus.started,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(interview)
+    await db.flush()  # Get the interview ID
+
+    # Create Daily.co room with guest's name
+    room_info = await create_daily_room(str(interview.id), guest_name)
+
+    interview.room_name = room_info["room_name"]
+    interview.room_token = room_info["room_token"]
+
+    await db.commit()
+
+    # Redirect to interview room
+    return RedirectResponse(
+        url=f"/i/{interview.magic_token}/room",
+        status_code=303,
     )
