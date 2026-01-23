@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Boswell{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell</a>
+        <div class="nav-links">
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="padding-top: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h1>Welcome, {{ user.name }}</h1>
+        <a href="/admin/interviews/new" class="btn">New Interview</a>
+    </div>
+
+    <div class="card">
+        <h2 class="mb-4">Interviews</h2>
+        {% if interviews %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Template</th>
+                    <th>Guests</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for interview in interviews %}
+                <tr>
+                    <td>{{ interview.topic }}</td>
+                    <td>
+                        {% if interview.template_name %}
+                            {{ interview.template_name }}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if interview.total_guests > 0 %}
+                            <span class="{% if interview.completed_guests == interview.total_guests %}status-completed{% elif interview.completed_guests > 0 %}status-started{% else %}status-invited{% endif %}">
+                                {{ interview.completed_guests }}/{{ interview.total_guests }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ interview.created_at.strftime('%b %d, %Y') }}</td>
+                    <td>
+                        <a href="/admin/interviews/{{ interview.id }}" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center" style="padding: 2rem 0;">
+            No interviews yet. <a href="/admin/interviews/new">Create your first interview</a> to get started.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

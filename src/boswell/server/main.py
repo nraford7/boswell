@@ -33,6 +33,12 @@ app = FastAPI(
 # Templates
 templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
 
+# Import and include routers after app is created to avoid circular imports
+from boswell.server.routes import admin, auth  # noqa: E402
+
+app.include_router(auth.router, prefix="/admin")
+app.include_router(admin.router)
+
 
 @app.get("/health")
 async def health_check():
