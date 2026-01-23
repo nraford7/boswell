@@ -43,8 +43,9 @@ class TranscriptCollector(FrameProcessor):
     - TextFrame: Bot responses (from Claude via TTS)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, guest_name: str = "Guest", **kwargs):
         super().__init__(**kwargs)
+        self.guest_name = guest_name
         self.entries: list[TranscriptEntry] = []
         self._current_bot_text: str = ""
         self._last_guest_text: str = ""
@@ -65,7 +66,7 @@ class TranscriptCollector(FrameProcessor):
                     self.entries.append(
                         TranscriptEntry(
                             timestamp=timestamp,
-                            speaker="guest",
+                            speaker=self.guest_name,
                             text=frame.text.strip(),
                         )
                     )

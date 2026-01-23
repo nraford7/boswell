@@ -109,12 +109,16 @@ async def start_voice_interview(
         f"(room={interview.room_name}, topic='{project.topic}')"
     )
 
+    # Get guest name for transcript
+    guest_name = getattr(interview, 'name', None) or "Guest"
+
     # Run the Pipecat pipeline (blocks until interview ends)
     transcript_entries, conversation_history = await run_interview(
         room_url=room_url,
         room_token=room_token,
         system_prompt=system_prompt,
         bot_name="Boswell",
+        guest_name=guest_name,
     )
 
     logger.info(
@@ -232,16 +236,18 @@ async def run_interview_task(interview_id: UUID) -> None:
             project = interview.project
             room_name = interview.room_name
             room_token = interview.room_token
+            guest_name = interview.name
 
         # Create a minimal interview object for the voice session
         # (We can't use the SQLAlchemy object outside the session)
         class InterviewData:
-            def __init__(self, id, room_name, room_token):
+            def __init__(self, id, room_name, room_token, name):
                 self.id = id
                 self.room_name = room_name
                 self.room_token = room_token
+                self.name = name
 
-        interview_data = InterviewData(interview_id, room_name, room_token)
+        interview_data = InterviewData(interview_id, room_name, room_token, guest_name)
 
         # Run the interview (this blocks until complete)
         transcript_entries, conversation_history = await start_voice_interview(

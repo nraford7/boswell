@@ -25,6 +25,7 @@ async def create_pipeline(
     room_token: str,
     system_prompt: str,
     bot_name: str = "Boswell",
+    guest_name: str = "Guest",
     on_transcript_update: Callable | None = None,
     initial_messages: list[dict] | None = None,
 ) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, OpenAILLMContext]:
@@ -35,6 +36,7 @@ async def create_pipeline(
         room_token: Daily.co room token for bot authentication.
         system_prompt: System prompt for Claude with interview context.
         bot_name: Display name for the bot in the room.
+        guest_name: Display name for the guest in transcripts.
         on_transcript_update: Optional callback for transcript updates.
         initial_messages: Optional conversation history for resuming paused interviews.
 
@@ -111,7 +113,7 @@ async def create_pipeline(
     context_aggregator = llm.create_context_aggregator(context)
 
     # Set up transcript collection
-    transcript_collector = TranscriptCollector()
+    transcript_collector = TranscriptCollector(guest_name=guest_name)
     bot_response_collector = BotResponseCollector(transcript_collector)
 
     # Set up immediate acknowledgment for reduced perceived latency
@@ -214,6 +216,7 @@ async def run_interview(
     room_token: str,
     system_prompt: str,
     bot_name: str = "Boswell",
+    guest_name: str = "Guest",
     initial_messages: list[dict] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict]]:
     """Run a voice interview session.
@@ -223,6 +226,7 @@ async def run_interview(
         room_token: Daily.co room token.
         system_prompt: System prompt for Claude.
         bot_name: Display name for the bot.
+        guest_name: Display name for the guest in transcripts.
         initial_messages: Optional conversation history for resuming.
 
     Returns:
@@ -233,6 +237,7 @@ async def run_interview(
         room_token=room_token,
         system_prompt=system_prompt,
         bot_name=bot_name,
+        guest_name=guest_name,
         initial_messages=initial_messages,
     )
 

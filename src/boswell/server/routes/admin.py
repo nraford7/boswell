@@ -6,6 +6,7 @@ import csv
 import io
 import logging
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
@@ -1112,6 +1113,146 @@ async def download_transcript(
 
     # Return as downloadable JSON
     filename = f"transcript-{interview.name.lower().replace(' ', '-')}-{interview_id}.json"
+    return JSONResponse(
+        content=download_data,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
+@router.get("/projects/{project_id}/edit")
+async def edit_project_form(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the project edit form."""
+    result = await db.execute(
+        select(Project)
+        .options(selectinload(Project.template))
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get questions as a list of strings
+    questions_list = []
+    if project.questions and isinstance(project.questions, dict):
+        raw_questions = project.questions.get("questions", [])
+        for q in raw_questions:
+            if isinstance(q, dict):
+                questions_list.append(q.get("text", ""))
+            else:
+                questions_list.append(str(q))
+
+    return templates.TemplateResponse(
+        "admin/project_edit.html",
+        {
+            "request": request,
+            "user": user,
+            "project": project,
+            "questions_text": "\n".join(questions_list),
+        },
+    )
+
+
+@router.post("/projects/{project_id}/edit")
+async def edit_project(
+    request: Request,
+    project_id: UUID,
+    topic: str = Form(...),
+    research_summary: str = Form(""),
+    questions_text: str = Form(""),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Save project edits."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Update fields
+    project.topic = topic.strip()
+    project.research_summary = research_summary.strip() if research_summary.strip() else None
+
+    # Parse questions (one per line)
+    if questions_text.strip():
+        questions_lines = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
+        project.questions = {"questions": [{"text": q} for q in questions_lines]}
+    else:
+        project.questions = None
+
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+@router.get("/projects/{project_id}/transcripts/download-all")
+async def download_all_transcripts(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Download all completed transcripts as a single JSON file."""
+    import json
+
+    # Fetch project with all interviews and transcripts
+    result = await db.execute(
+        select(Project)
+        .options(
+            selectinload(Project.interviews).selectinload(Interview.transcript)
+        )
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Collect all completed interviews with transcripts
+    all_transcripts = []
+    for interview in project.interviews:
+        if interview.status == InterviewStatus.completed and interview.transcript:
+            all_transcripts.append({
+                "interview": {
+                    "id": str(interview.id),
+                    "name": interview.name,
+                    "email": interview.email,
+                    "started_at": interview.started_at.isoformat() if interview.started_at else None,
+                    "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+                },
+                "transcript": interview.transcript.entries or [],
+            })
+
+    if not all_transcripts:
+        raise HTTPException(status_code=404, detail="No completed transcripts found")
+
+    download_data = {
+        "project": {
+            "id": str(project.id),
+            "topic": project.topic,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "interviews": all_transcripts,
+    }
+
+    filename = f"transcripts-{project.topic.lower().replace(' ', '-')[:30]}-{project_id}.json"
     return JSONResponse(
         content=download_data,
         headers={
