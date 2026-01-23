@@ -5,6 +5,7 @@ import asyncio
 import csv
 import io
 import logging
+import secrets
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -309,6 +310,61 @@ async def project_detail(
             "interviews": project.interviews,
             "base_url": settings.base_url,
         },
+    )
+
+
+@router.post("/projects/{project_id}/generate-public-link")
+async def generate_public_link(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Generate or regenerate a public interview link for a project."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Generate a secure random token
+    project.public_link_token = secrets.token_urlsafe(32)
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+@router.post("/projects/{project_id}/disable-public-link")
+async def disable_public_link(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Disable the public interview link for a project."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.public_link_token = None
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
     )
 
 
