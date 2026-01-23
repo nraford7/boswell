@@ -129,6 +129,11 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Public link token for generic interview links
+    public_link_token: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
+
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="projects")
     template: Mapped[Optional["InterviewTemplate"]] = relationship(
