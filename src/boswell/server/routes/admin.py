@@ -11,7 +11,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,7 +20,7 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_invitation_email
 from boswell.server.main import templates
-from boswell.server.models import Interview, InterviewStatus, Project, InterviewTemplate, User
+from boswell.server.models import Interview, InterviewStatus, Project, InterviewTemplate, Transcript, User
 from boswell.server.routes.auth import get_current_user
 
 # Import ingestion functions
@@ -882,3 +882,239 @@ async def bulk_import_submit(
     )
 
     return RedirectResponse(url="/admin/", status_code=303)
+
+
+# -----------------------------------------------------------------------------
+# Follow-up Interview Routes
+# -----------------------------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/interviews/{interview_id}/followup")
+async def create_followup_interview(
+    request: Request,
+    project_id: UUID,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a follow-up interview for a completed interview.
+
+    Creates a new Interview with the same email/name but a fresh magic_token.
+    """
+    # Fetch the original interview
+    result = await db.execute(
+        select(Interview)
+        .options(selectinload(Interview.project))
+        .where(Interview.id == interview_id)
+        .where(Interview.project_id == project_id)
+    )
+    original = result.scalar_one_or_none()
+
+    if original is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Verify project belongs to user's team
+    if original.project.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Create the follow-up interview (new magic_token generated automatically)
+    followup = Interview(
+        project_id=project_id,
+        email=original.email,
+        name=original.name,
+    )
+    db.add(followup)
+    await db.flush()
+
+    logger.info(
+        f"Created follow-up interview {followup.id} for {original.email} "
+        f"(original: {original.id})"
+    )
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Delete Routes
+# -----------------------------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/interviews/{interview_id}/delete")
+async def delete_interview(
+    request: Request,
+    project_id: UUID,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete an interview.
+
+    Also deletes associated transcript and analysis records (via CASCADE).
+    """
+    # Fetch the interview with project
+    result = await db.execute(
+        select(Interview)
+        .options(selectinload(Interview.project))
+        .where(Interview.id == interview_id)
+        .where(Interview.project_id == project_id)
+    )
+    interview = result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Verify project belongs to user's team
+    if interview.project.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    await db.delete(interview)
+    await db.flush()
+
+    logger.info(f"Deleted interview {interview_id} from project {project_id}")
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+@router.post("/projects/{project_id}/delete")
+async def delete_project(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete a project and all associated interviews.
+
+    Also deletes associated transcripts and analyses (via CASCADE).
+    """
+    # Fetch the project
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    await db.delete(project)
+    await db.flush()
+
+    logger.info(f"Deleted project {project_id}")
+
+    return RedirectResponse(
+        url="/admin/",
+        status_code=303,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Transcript Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/interviews/{interview_id}/transcript")
+async def view_transcript(
+    request: Request,
+    project_id: UUID,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """View the transcript for an interview."""
+    # Fetch the interview with transcript and project
+    result = await db.execute(
+        select(Interview)
+        .options(
+            selectinload(Interview.project),
+            selectinload(Interview.transcript),
+        )
+        .where(Interview.id == interview_id)
+        .where(Interview.project_id == project_id)
+    )
+    interview = result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Verify project belongs to user's team
+    if interview.project.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if not interview.transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/transcript.html",
+        context={
+            "user": user,
+            "project": interview.project,
+            "interview": interview,
+            "transcript": interview.transcript,
+            "entries": interview.transcript.entries or [],
+        },
+    )
+
+
+@router.get("/projects/{project_id}/interviews/{interview_id}/transcript/download")
+async def download_transcript(
+    request: Request,
+    project_id: UUID,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Download the transcript as JSON."""
+    # Fetch the interview with transcript and project
+    result = await db.execute(
+        select(Interview)
+        .options(
+            selectinload(Interview.project),
+            selectinload(Interview.transcript),
+        )
+        .where(Interview.id == interview_id)
+        .where(Interview.project_id == project_id)
+    )
+    interview = result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    # Verify project belongs to user's team
+    if interview.project.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if not interview.transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    # Build download data
+    download_data = {
+        "interview": {
+            "id": str(interview.id),
+            "name": interview.name,
+            "email": interview.email,
+            "started_at": interview.started_at.isoformat() if interview.started_at else None,
+            "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+        },
+        "project": {
+            "id": str(interview.project.id),
+            "topic": interview.project.topic,
+        },
+        "transcript": interview.transcript.entries or [],
+    }
+
+    # Return as downloadable JSON
+    filename = f"transcript-{interview.name.lower().replace(' ', '-')}-{interview_id}.json"
+    return JSONResponse(
+        content=download_data,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )

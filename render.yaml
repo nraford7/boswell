@@ -1,0 +1,60 @@
+# Render Blueprint - Deploy Boswell
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: Click "New Blueprint" in Render dashboard and connect your repo
+
+databases:
+  - name: boswell-db
+    plan: starter
+    databaseName: boswell
+    user: boswell
+
+services:
+  # Web Service (FastAPI)
+  - type: web
+    name: boswell-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: ./scripts/start_web.sh
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boswell-db
+          property: connectionString
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: DAILY_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+  # Voice Worker (Background)
+  - type: worker
+    name: boswell-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: ./scripts/start_worker.sh
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boswell-db
+          property: connectionString
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: DAILY_API_KEY
+        sync: false

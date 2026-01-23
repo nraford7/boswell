@@ -352,18 +352,26 @@
 
 <div class="container">
     <div class="page-header">
-        <a href="/admin/" class="back-link">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
-            </svg>
-            All Projects
-        </a>
-        <h1 class="page-title">{{ project.topic }}</h1>
-        <p class="page-subtitle">
-            {{ project.target_minutes }} min target
-            {% if project.template %} &middot; {{ project.template.name }}{% endif %}
-            &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
-        </p>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+            <div>
+                <a href="/admin/" class="back-link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+                    </svg>
+                    All Projects
+                </a>
+                <h1 class="page-title">{{ project.topic }}</h1>
+                <p class="page-subtitle">
+                    {{ project.target_minutes }} min target
+                    {% if project.template %} &middot; {{ project.template.name }}{% endif %}
+                    &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
+                </p>
+            </div>
+            <form method="post" action="/admin/projects/{{ project.id }}/delete"
+                  onsubmit="return confirm('Delete this project and all its interviews? This cannot be undone.');">
+                <button type="submit" class="btn btn-outline" style="color: #994444; border-color: #994444;">Delete Project</button>
+            </form>
+        </div>
     </div>
 
     {% set total_interviews = interviews|length if interviews else 0 %}
@@ -507,6 +515,11 @@
                         {% if interview.status.value == 'completed' and interview.transcript %}
                         <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript" class="btn btn-outline btn-sm">Transcript</a>
                         {% endif %}
+                        {% if interview.status.value == 'completed' %}
+                        <form method="post" action="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/followup" style="display: inline;">
+                            <button type="submit" class="btn btn-outline btn-sm">Add Follow-up</button>
+                        </form>
+                        {% endif %}
                         {% if interview.status.value in ['invited', 'started'] %}
                         <button type="button" class="btn btn-outline btn-sm"
                                 hx-post="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/remind"
@@ -515,6 +528,10 @@
                             Remind
                         </button>
                         {% endif %}
+                        <form method="post" action="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/delete" style="display: inline;"
+                              onsubmit="return confirm('Delete interview with {{ interview.name }}? This cannot be undone.');">
+                            <button type="submit" class="btn btn-outline btn-sm" style="color: #994444; border-color: #994444;">Delete</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

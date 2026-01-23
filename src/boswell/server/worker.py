@@ -74,7 +74,7 @@ async def start_voice_interview(
 
     # Build room URL from room_name
     # The room_name is like "boswell-{interview_id[:8]}"
-    room_url = f"https://boswell.daily.co/{interview.room_name}"
+    room_url = f"https://emirbot.daily.co/{interview.room_name}"
 
     # Get the bot token (stored in interview.room_token)
     # Note: In current implementation, room_token is an interview token

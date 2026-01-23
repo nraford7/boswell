@@ -85,15 +85,11 @@ async def create_pipeline(
     )
 
     # Set up TTS (Text-to-Speech) with ElevenLabs
+    # Using Rachel voice (ElevenLabs default) with default settings
     tts = ElevenLabsTTSService(
         api_key=config.elevenlabs_api_key,
-        voice_id="XcXEQzuLXRU9RcfWzEJt",  # Veda Sky - Natural, Mindful and Caring
+        voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, natural voice
         model="eleven_turbo_v2",  # Fast model for low latency
-        voice_settings={
-            "stability": 0.5,
-            "similarity_boost": 0.75,
-            "speed": 1.15,  # 15% faster speech
-        },
     )
 
     # Set up LLM with Claude
@@ -158,24 +154,40 @@ async def create_pipeline(
     # Track if this is a resumed interview
     is_resumed = initial_messages is not None
 
+    # Track if we've already greeted to prevent double greeting
+    greeting_sent = False
+
     # Event handlers
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):
         """Greet the guest when they join."""
+        nonlocal greeting_sent
+
+        # Prevent double greeting
+        if greeting_sent:
+            return
+        greeting_sent = True
+
+        # Skip if this is the bot itself joining
+        participant_info = participant.get("info", {})
+        if participant_info.get("isLocal", False):
+            greeting_sent = False  # Reset so we greet the actual guest
+            return
+
         if is_resumed:
-            # Resuming a paused interview - welcome back message
+            # Resuming a paused interview
             await task.queue_frames(
                 [LLMMessagesFrame([{
                     "role": "user",
-                    "content": "The guest has rejoined after a pause. Welcome them back warmly and briefly remind them where you left off. Then continue the interview naturally."
+                    "content": "Guest rejoined. Welcome back briefly, then continue."
                 }])]
             )
         else:
-            # New interview - full greeting
+            # New interview - just start
             await task.queue_frames(
                 [LLMMessagesFrame([{
                     "role": "user",
-                    "content": "The guest has just joined the room. Follow your OPENING THE INTERVIEW instructions exactly - greet them, explain the interview, mention the timing, tell them about pauses and that they can stop/repeat anytime, then ask if they're ready."
+                    "content": "Guest joined. Begin."
                 }])]
             )
 

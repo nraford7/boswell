@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Transcript: {{ interview.name }} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 400;
+        color: var(--fg);
+        margin-bottom: 0.25rem;
+    }
+
+    .page-subtitle {
+        color: var(--fg-dim);
+        font-size: 0.875rem;
+    }
+
+    .transcript-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .transcript-meta {
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.875rem;
+        color: var(--fg-dim);
+    }
+
+    .transcript-container {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+    }
+
+    .transcript-entry {
+        display: flex;
+        gap: 1rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .transcript-entry:last-child {
+        border-bottom: none;
+    }
+
+    .transcript-entry.struck {
+        opacity: 0.5;
+        text-decoration: line-through;
+    }
+
+    .entry-speaker {
+        flex-shrink: 0;
+        width: 80px;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+    }
+
+    .entry-speaker.guest {
+        color: var(--accent);
+    }
+
+    .entry-speaker.boswell {
+        color: var(--fg-dim);
+    }
+
+    .entry-content {
+        flex: 1;
+        line-height: 1.6;
+        color: var(--fg);
+    }
+
+    .entry-timestamp {
+        flex-shrink: 0;
+        font-size: 0.75rem;
+        color: var(--fg-dim);
+        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--fg-dim);
+    }
+
+    .download-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .download-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Projects</a>
+            <a href="/admin/templates">Interview Types</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/projects/{{ project.id }}" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Project
+        </a>
+        <h1 class="page-title">Transcript: {{ interview.name }}</h1>
+        <p class="page-subtitle">{{ project.topic }}</p>
+    </div>
+
+    <div class="transcript-header">
+        <div class="transcript-meta">
+            <span>{{ interview.email }}</span>
+            {% if interview.completed_at %}
+            <span>Completed {{ interview.completed_at.strftime('%b %d, %Y at %I:%M %p') }}</span>
+            {% endif %}
+            <span>{{ entries|length }} entries</span>
+        </div>
+        <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download"
+           class="btn btn-outline download-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download JSON
+        </a>
+    </div>
+
+    <div class="transcript-container">
+        {% if entries %}
+            {% for entry in entries %}
+            <div class="transcript-entry {% if entry.struck %}struck{% endif %}">
+                <div class="entry-speaker {{ entry.speaker }}">
+                    {{ entry.speaker|upper }}
+                </div>
+                <div class="entry-content">
+                    {{ entry.text }}
+                </div>
+                <div class="entry-timestamp">
+                    {{ entry.timestamp[:19].replace('T', ' ') if entry.timestamp else '' }}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <p>No transcript entries found.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
