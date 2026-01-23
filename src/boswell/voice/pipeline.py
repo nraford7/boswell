@@ -183,11 +183,11 @@ async def create_pipeline(
                 }])]
             )
         else:
-            # New interview - just start
+            # New interview - introduce and begin
             await task.queue_frames(
                 [LLMMessagesFrame([{
                     "role": "user",
-                    "content": "Guest joined. Begin."
+                    "content": "Guest joined. Briefly introduce yourself as Boswell, mention the interview topic, and ask your first question. Keep the intro to 1-2 sentences."
                 }])]
             )
 
