@@ -2,8 +2,9 @@
 """Admin routes for dashboard and interview management."""
 
 from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from boswell.server.database import get_session
 from boswell.server.main import templates
-from boswell.server.models import GuestStatus, Interview, User
+from boswell.server.models import Guest, GuestStatus, Interview, User
 from boswell.server.routes.auth import get_current_user
 
 router = APIRouter(prefix="/admin")
@@ -93,5 +94,40 @@ async def dashboard(
         context={
             "user": user,
             "interviews": interview_data,
+        },
+    )
+
+
+@router.get("/interviews/{interview_id}")
+async def interview_detail(
+    request: Request,
+    interview_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Interview detail page showing interview info and guest list."""
+    # Fetch interview with related data
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id == interview_id)
+        .options(
+            selectinload(Interview.template),
+            selectinload(Interview.guests).selectinload(Guest.transcript),
+            selectinload(Interview.guests).selectinload(Guest.analysis),
+        )
+    )
+    interview = result.scalar_one_or_none()
+
+    # Check if interview exists and belongs to user's team
+    if interview is None or interview.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/interview_detail.html",
+        context={
+            "user": user,
+            "interview": interview,
+            "guests": interview.guests,
         },
     )

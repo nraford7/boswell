@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ interview.topic }} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+
+    .badge-invited {
+        background-color: #cfe2ff;
+        color: #084298;
+    }
+
+    .badge-started {
+        background-color: #fff3cd;
+        color: #664d03;
+    }
+
+    .badge-completed {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .badge-expired {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+    }
+
+    .back-link:hover {
+        color: var(--primary);
+    }
+
+    .back-link svg {
+        margin-right: 0.25rem;
+    }
+
+    .interview-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .meta-item {
+        background-color: var(--bg);
+        padding: 1rem;
+        border-radius: 4px;
+    }
+
+    .meta-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+    }
+
+    .meta-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .research-summary {
+        background-color: var(--bg);
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 1.5rem;
+        white-space: pre-wrap;
+    }
+
+    .questions-list {
+        list-style: decimal;
+        padding-left: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .questions-list li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .questions-list li:last-child {
+        border-bottom: none;
+    }
+
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .actions-cell {
+        white-space: nowrap;
+    }
+
+    .actions-cell .btn {
+        margin-right: 0.25rem;
+    }
+
+    .actions-cell .btn:last-child {
+        margin-right: 0;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell</a>
+        <div class="nav-links">
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="padding-top: 2rem;">
+    <a href="/admin/" class="back-link">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+        </svg>
+        Back to Dashboard
+    </a>
+
+    <h1 style="margin-bottom: 1.5rem;">{{ interview.topic }}</h1>
+
+    <div class="card">
+        <div class="interview-meta">
+            {% if interview.template %}
+            <div class="meta-item">
+                <div class="meta-label">Template</div>
+                <div class="meta-value">{{ interview.template.name }}</div>
+            </div>
+            {% endif %}
+            <div class="meta-item">
+                <div class="meta-label">Target Duration</div>
+                <div class="meta-value">{{ interview.target_minutes }} minutes</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Created</div>
+                <div class="meta-value">{{ interview.created_at.strftime('%b %d, %Y') }}</div>
+            </div>
+        </div>
+
+        {% if interview.research_summary %}
+        <h3 class="mb-2">Research Summary</h3>
+        <div class="research-summary">{{ interview.research_summary }}</div>
+        {% endif %}
+
+        {% if interview.questions and interview.questions.questions %}
+        <h3 class="mb-2">Generated Questions</h3>
+        <ol class="questions-list">
+            {% for question in interview.questions.questions %}
+            <li>{{ question }}</li>
+            {% endfor %}
+        </ol>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="section-header">
+            <h2>Guests</h2>
+            <a href="/admin/interviews/{{ interview.id }}/invite" class="btn">Invite Guest</a>
+        </div>
+
+        {% if guests %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Invited</th>
+                    <th>Started</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for guest in guests %}
+                <tr>
+                    <td>{{ guest.name }}</td>
+                    <td>{{ guest.email }}</td>
+                    <td>
+                        <span class="badge badge-{{ guest.status.value }}">{{ guest.status.value }}</span>
+                    </td>
+                    <td>{{ guest.invited_at.strftime('%b %d, %Y') if guest.invited_at else '-' }}</td>
+                    <td>{{ guest.started_at.strftime('%b %d, %Y') if guest.started_at else '-' }}</td>
+                    <td>{{ guest.completed_at.strftime('%b %d, %Y') if guest.completed_at else '-' }}</td>
+                    <td class="actions-cell">
+                        {% if guest.status.value == 'completed' and guest.transcript %}
+                        <a href="/admin/interviews/{{ interview.id }}/guests/{{ guest.id }}/transcript" class="btn btn-outline btn-sm">View Transcript</a>
+                        {% endif %}
+                        {% if guest.status.value in ['invited', 'started'] %}
+                        <button type="button" class="btn btn-outline btn-sm"
+                                hx-post="/admin/interviews/{{ interview.id }}/guests/{{ guest.id }}/remind"
+                                hx-swap="none"
+                                hx-confirm="Send reminder email to {{ guest.name }}?">
+                            Send Reminder
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center" style="padding: 2rem 0;">
+            No guests have been invited yet. <a href="/admin/interviews/{{ interview.id }}/invite">Invite your first guest</a> to get started.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
