@@ -74,6 +74,6 @@ USER appuser
 # Expose port for web service
 EXPOSE 8000
 
-# Default command (can be overridden)
-# Use start_web.sh for web service, start_worker.sh for voice worker
-CMD ["./scripts/start_web.sh"]
+# Default command - uses SERVICE_TYPE env var to select web or worker
+# Set SERVICE_TYPE=worker for voice worker, otherwise runs web server
+CMD ["./scripts/entrypoint.sh"]
