@@ -211,3 +211,190 @@ async def interview_detail(
             "guests": interview.guests,
         },
     )
+
+
+# -----------------------------------------------------------------------------
+# Template Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/templates")
+async def templates_list(
+    request: Request,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """List all templates for the user's team."""
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    interview_templates = result.scalars().all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/templates_list.html",
+        context={
+            "user": user,
+            "templates": interview_templates,
+        },
+    )
+
+
+@router.get("/templates/new")
+async def template_new_form(
+    request: Request,
+    user: User = Depends(require_auth),
+):
+    """Show the new template form."""
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/template_form.html",
+        context={
+            "user": user,
+            "template": None,
+            "mode": "new",
+        },
+    )
+
+
+@router.post("/templates/new")
+async def template_new_submit(
+    request: Request,
+    user: User = Depends(require_auth),
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    prompt_modifier: Optional[str] = Form(None),
+    default_minutes: int = Form(30),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a new template."""
+    # Validate name
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Clean optional fields
+    description = description.strip() if description else None
+    prompt_modifier = prompt_modifier.strip() if prompt_modifier else None
+
+    # Validate default_minutes
+    if default_minutes < 5 or default_minutes > 120:
+        raise HTTPException(
+            status_code=400, detail="Default duration must be between 5 and 120 minutes"
+        )
+
+    # Create the template
+    template = InterviewTemplate(
+        team_id=user.team_id,
+        name=name,
+        description=description,
+        prompt_modifier=prompt_modifier,
+        default_minutes=default_minutes,
+    )
+    db.add(template)
+    await db.flush()
+
+    return RedirectResponse(url="/admin/templates", status_code=303)
+
+
+@router.get("/templates/{template_id}/edit")
+async def template_edit_form(
+    request: Request,
+    template_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the edit template form."""
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.id == template_id)
+        .where(InterviewTemplate.team_id == user.team_id)
+    )
+    template = result.scalar_one_or_none()
+
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/template_form.html",
+        context={
+            "user": user,
+            "template": template,
+            "mode": "edit",
+        },
+    )
+
+
+@router.post("/templates/{template_id}/edit")
+async def template_edit_submit(
+    request: Request,
+    template_id: UUID,
+    user: User = Depends(require_auth),
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    prompt_modifier: Optional[str] = Form(None),
+    default_minutes: int = Form(30),
+    db: AsyncSession = Depends(get_session),
+):
+    """Update an existing template."""
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.id == template_id)
+        .where(InterviewTemplate.team_id == user.team_id)
+    )
+    template = result.scalar_one_or_none()
+
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Validate name
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Clean optional fields
+    description = description.strip() if description else None
+    prompt_modifier = prompt_modifier.strip() if prompt_modifier else None
+
+    # Validate default_minutes
+    if default_minutes < 5 or default_minutes > 120:
+        raise HTTPException(
+            status_code=400, detail="Default duration must be between 5 and 120 minutes"
+        )
+
+    # Update the template
+    template.name = name
+    template.description = description
+    template.prompt_modifier = prompt_modifier
+    template.default_minutes = default_minutes
+
+    await db.flush()
+
+    return RedirectResponse(url="/admin/templates", status_code=303)
+
+
+@router.post("/templates/{template_id}/delete")
+async def template_delete(
+    request: Request,
+    template_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete a template."""
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.id == template_id)
+        .where(InterviewTemplate.team_id == user.team_id)
+    )
+    template = result.scalar_one_or_none()
+
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    await db.delete(template)
+    await db.flush()
+
+    return RedirectResponse(url="/admin/templates", status_code=303)

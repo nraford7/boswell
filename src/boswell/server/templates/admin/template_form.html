@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == 'edit' %}Edit Template{% else %}New Template{% endif %} - Boswell{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell</a>
+        <div class="nav-links">
+            <a href="/admin/">Dashboard</a>
+            <a href="/admin/templates">Templates</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="padding-top: 2rem;">
+    <div class="mb-4">
+        <a href="/admin/templates" style="color: var(--primary); text-decoration: none;">&larr; Back to Templates</a>
+    </div>
+
+    <div class="card" style="max-width: 600px;">
+        <h1 class="mb-4">{% if mode == 'edit' %}Edit Template{% else %}New Template{% endif %}</h1>
+
+        <form method="post" action="{% if mode == 'edit' %}/admin/templates/{{ template.id }}/edit{% else %}/admin/templates/new{% endif %}">
+            <div class="mb-4">
+                <label for="name" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Name *</label>
+                <input type="text" id="name" name="name" required placeholder="Template name" value="{% if template %}{{ template.name }}{% endif %}">
+            </div>
+
+            <div class="mb-4">
+                <label for="description" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Description</label>
+                <textarea id="description" name="description" placeholder="Brief description of what this template is for">{% if template and template.description %}{{ template.description }}{% endif %}</textarea>
+                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">Optional: Describe the purpose of this interview template.</p>
+            </div>
+
+            <div class="mb-4">
+                <label for="prompt_modifier" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Prompt Modifier</label>
+                <textarea id="prompt_modifier" name="prompt_modifier" placeholder="Additional instructions for the AI interviewer" style="min-height: 150px;">{% if template and template.prompt_modifier %}{{ template.prompt_modifier }}{% endif %}</textarea>
+                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">Optional: Custom instructions to modify how the AI conducts interviews using this template.</p>
+            </div>
+
+            <div class="mb-4">
+                <label for="default_minutes" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Default Duration (minutes)</label>
+                <input type="number" id="default_minutes" name="default_minutes" value="{% if template %}{{ template.default_minutes }}{% else %}30{% endif %}" min="5" max="120" required>
+                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">The default target length for interviews using this template (5-120 minutes).</p>
+            </div>
+
+            <button type="submit" class="btn" style="width: 100%;">{% if mode == 'edit' %}Update Template{% else %}Create Template{% endif %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
