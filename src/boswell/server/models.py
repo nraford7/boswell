@@ -146,6 +146,7 @@ class Interview(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     project_id: Mapped[UUID] = mapped_column(
+        "interview_id",  # Keep column name to avoid migration
         ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -193,6 +194,7 @@ class Transcript(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     interview_id: Mapped[UUID] = mapped_column(
+        "guest_id",  # Keep column name to avoid migration
         ForeignKey("guests.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     entries: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -212,6 +214,7 @@ class Analysis(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     interview_id: Mapped[UUID] = mapped_column(
+        "guest_id",  # Keep column name to avoid migration
         ForeignKey("guests.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     insights: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
