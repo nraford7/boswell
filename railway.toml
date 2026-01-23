@@ -1,0 +1,56 @@
+# Boswell Railway Configuration
+# Deploys two services: web (FastAPI) and worker (voice pipeline)
+#
+# Railway deployment uses a shared PostgreSQL database.
+# Set all environment variables in the Railway dashboard.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+# =============================================================================
+# Web Service Configuration
+# =============================================================================
+# The primary FastAPI web server that handles HTTP requests, admin interface,
+# and guest interview pages.
+
+[[services]]
+name = "web"
+startCommand = "./scripts/start_web.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "always"
+restartPolicyMaxRetries = 3
+
+[services.resources]
+# Railway will auto-scale based on these limits
+cpuLimit = 1
+memoryLimit = "1Gi"
+
+# =============================================================================
+# Worker Service Configuration
+# =============================================================================
+# The voice worker that polls for active interviews and runs Pipecat voice
+# pipelines. This service has no HTTP interface.
+
+[[services]]
+name = "worker"
+startCommand = "./scripts/start_worker.sh"
+restartPolicyType = "always"
+restartPolicyMaxRetries = 3
+
+[services.resources]
+# Voice processing may need more resources
+cpuLimit = 2
+memoryLimit = "2Gi"
+
+# =============================================================================
+# Deploy Configuration
+# =============================================================================
+
+[deploy]
+# Run migrations before starting web service
+startCommand = "./scripts/start_web.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "always"

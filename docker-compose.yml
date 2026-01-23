@@ -1,26 +1,86 @@
 # Boswell AI Research Interviewer
-# Docker Compose configuration
+# Docker Compose configuration for local development
+#
+# Usage:
+#   Start all services:  docker-compose up -d
+#   View logs:           docker-compose logs -f
+#   Stop services:       docker-compose down
+#   Reset database:      docker-compose down -v
 
 services:
-  boswell:
+  # ==========================================================================
+  # PostgreSQL Database
+  # ==========================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: boswell-db
+    environment:
+      POSTGRES_USER: boswell
+      POSTGRES_PASSWORD: boswell
+      POSTGRES_DB: boswell
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U boswell"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Web Service (FastAPI)
+  # ==========================================================================
+  # Serves the admin interface, guest interview pages, and API endpoints.
+  # Runs Alembic migrations on startup.
+  web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: boswell
-    # Load environment variables from .env file
+    container_name: boswell-web
+    command: ["./scripts/start_web.sh"]
     env_file:
       - .env
-    # Mount outputs directory for persistence
+    environment:
+      # Override DATABASE_URL to use the local container
+      DATABASE_URL: postgresql+asyncpg://boswell:boswell@db:5432/boswell
+    ports:
+      - "${PORT:-8000}:8000"
     volumes:
-      - ./outputs:/app/outputs
-      # Mount config directory for persistent settings
-      - boswell-config:/root/.boswell
-    # Interactive mode for CLI usage
-    stdin_open: true
-    tty: true
-    # Override entrypoint for development/interactive use
-    # entrypoint: ["/bin/bash"]
+      # Mount source for development (hot reload with uvicorn --reload)
+      - ./src:/app/src:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Voice Worker Service
+  # ==========================================================================
+  # Polls for active interviews and runs Pipecat voice pipelines.
+  # No HTTP interface - communicates via database.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: boswell-worker
+    command: ["./scripts/start_worker.sh"]
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to use the local container
+      DATABASE_URL: postgresql+asyncpg://boswell:boswell@db:5432/boswell
+    volumes:
+      # Mount source for development
+      - ./src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
-  boswell-config:
-    name: boswell-config
+  postgres-data:
+    name: boswell-postgres-data
