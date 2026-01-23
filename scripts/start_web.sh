@@ -8,8 +8,15 @@
 # Environment variables:
 #   PORT - Server port (default: 8000)
 #   DATABASE_URL - PostgreSQL connection string (required)
+#   SERVICE_TYPE - If "worker", redirects to start_worker.sh
 
 set -e
+
+# Check if we should run as worker instead
+if [ "${SERVICE_TYPE}" = "worker" ]; then
+    echo "SERVICE_TYPE=worker detected, redirecting to worker..."
+    exec "$(dirname "$0")/start_worker.sh"
+fi
 
 echo "Starting Boswell web server..."
 
