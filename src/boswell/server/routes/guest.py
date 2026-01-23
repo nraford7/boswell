@@ -1,37 +1,103 @@
 # src/boswell/server/routes/guest.py
 """Interview routes for magic token access (no auth required)."""
 
-import secrets
+import logging
+import time
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.main import templates
 from boswell.server.models import Interview, InterviewStatus
 
+logger = logging.getLogger(__name__)
 
-def create_mock_daily_room(interview_id: str) -> dict:
-    """Create a mock Daily.co room for development.
+DAILY_API_URL = "https://api.daily.co/v1"
 
-    In production, this will call the Daily.co API.
+
+async def create_daily_room(interview_id: str) -> dict:
+    """Create a Daily.co room for the interview.
 
     Args:
         interview_id: The interview's UUID as a string.
 
     Returns:
         dict with room_name, room_url, and room_token.
+
+    Raises:
+        RuntimeError: If room creation fails.
     """
+    settings = get_settings()
     room_name = f"boswell-{interview_id[:8]}"
-    return {
-        "room_name": room_name,
-        "room_url": f"https://boswell.daily.co/{room_name}",
-        "room_token": secrets.token_urlsafe(32),
-    }
+
+    async with httpx.AsyncClient() as client:
+        # Create the room
+        response = await client.post(
+            f"{DAILY_API_URL}/rooms",
+            headers={
+                "Authorization": f"Bearer {settings.daily_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "name": room_name,
+                "properties": {
+                    "max_participants": 10,
+                    "enable_chat": False,
+                    "enable_knocking": False,
+                    "start_video_off": True,
+                    "start_audio_off": False,
+                    "exp": int(time.time()) + 7200,  # 2 hours
+                },
+            },
+        )
+
+        if response.status_code not in (200, 201):
+            # Room might already exist, try to get it
+            if "already exists" in response.text.lower():
+                logger.info(f"Room {room_name} already exists, reusing")
+            else:
+                error_text = response.text
+                logger.error(f"Failed to create Daily room: {error_text}")
+                raise RuntimeError(f"Failed to create Daily room: {error_text}")
+
+        # Get room URL (create response or fetch existing)
+        room_url = f"https://boswell.daily.co/{room_name}"
+
+        # Create a meeting token for the guest
+        token_response = await client.post(
+            f"{DAILY_API_URL}/meeting-tokens",
+            headers={
+                "Authorization": f"Bearer {settings.daily_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "properties": {
+                    "room_name": room_name,
+                    "is_owner": False,
+                    "user_name": "Guest",
+                },
+            },
+        )
+
+        if token_response.status_code not in (200, 201):
+            error_text = token_response.text
+            logger.error(f"Failed to create meeting token: {error_text}")
+            raise RuntimeError(f"Failed to create meeting token: {error_text}")
+
+        token_data = token_response.json()
+
+        return {
+            "room_name": room_name,
+            "room_url": room_url,
+            "room_token": token_data["token"],
+        }
 
 router = APIRouter()
 
@@ -165,8 +231,8 @@ async def start_interview(
             status_code=303,
         )
 
-    # Create Daily.co room (mock for now)
-    room_info = create_mock_daily_room(str(interview.id))
+    # Create Daily.co room
+    room_info = await create_daily_room(str(interview.id))
 
     # Update interview record
     interview.status = InterviewStatus.started
