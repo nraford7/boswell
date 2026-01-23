@@ -34,10 +34,11 @@ app = FastAPI(
 templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
 
 # Import and include routers after app is created to avoid circular imports
-from boswell.server.routes import admin, auth  # noqa: E402
+from boswell.server.routes import admin, auth, guest  # noqa: E402
 
 app.include_router(auth.router, prefix="/admin")
 app.include_router(admin.router)
+app.include_router(guest.router)  # No prefix - routes start with /i/
 
 
 @app.get("/health")
