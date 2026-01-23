@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}New Interview - Boswell{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell</a>
+        <div class="nav-links">
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="padding-top: 2rem;">
+    <div class="mb-4">
+        <a href="/admin/" style="color: var(--primary); text-decoration: none;">&larr; Back to Dashboard</a>
+    </div>
+
+    <div class="card" style="max-width: 600px;">
+        <h1 class="mb-4">New Interview</h1>
+
+        <form method="post" action="/admin/interviews/new">
+            <div class="mb-4">
+                <label for="topic" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Topic *</label>
+                <input type="text" id="topic" name="topic" required placeholder="What would you like to learn about?">
+            </div>
+
+            <div class="mb-4">
+                <label for="template_id" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Template</label>
+                <select id="template_id" name="template_id">
+                    <option value="">No template</option>
+                    {% for template in templates %}
+                    <option value="{{ template.id }}">{{ template.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">Optional: Select a template to pre-configure interview settings.</p>
+            </div>
+
+            <div class="mb-4">
+                <label for="target_minutes" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Target Duration (minutes)</label>
+                <input type="number" id="target_minutes" name="target_minutes" value="30" min="5" max="120" required>
+                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">The target length for each interview (5-120 minutes).</p>
+            </div>
+
+            <button type="submit" class="btn" style="width: 100%;">Create Interview</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -4,7 +4,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from boswell.server.database import get_session
 from boswell.server.main import templates
-from boswell.server.models import Guest, GuestStatus, Interview, User
+from boswell.server.models import Guest, GuestStatus, Interview, InterviewTemplate, User
 from boswell.server.routes.auth import get_current_user
 
 router = APIRouter(prefix="/admin")
@@ -95,6 +95,86 @@ async def dashboard(
             "user": user,
             "interviews": interview_data,
         },
+    )
+
+
+@router.get("/interviews/new")
+async def interview_new_form(
+    request: Request,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the new interview form."""
+    # Fetch templates for the user's team
+    result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    interview_templates = result.scalars().all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/interview_new.html",
+        context={
+            "user": user,
+            "templates": interview_templates,
+        },
+    )
+
+
+@router.post("/interviews/new")
+async def interview_new_submit(
+    request: Request,
+    user: User = Depends(require_auth),
+    topic: str = Form(...),
+    template_id: Optional[str] = Form(None),
+    target_minutes: int = Form(30),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a new interview."""
+    # Validate topic
+    topic = topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic is required")
+
+    # Parse template_id if provided
+    parsed_template_id: Optional[UUID] = None
+    if template_id and template_id.strip():
+        try:
+            parsed_template_id = UUID(template_id)
+            # Verify the template belongs to the user's team
+            result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == parsed_template_id)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            if result.scalar_one_or_none() is None:
+                raise HTTPException(status_code=400, detail="Invalid template")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid template ID")
+
+    # Validate target_minutes
+    if target_minutes < 5 or target_minutes > 120:
+        raise HTTPException(
+            status_code=400, detail="Duration must be between 5 and 120 minutes"
+        )
+
+    # Create the interview
+    interview = Interview(
+        team_id=user.team_id,
+        template_id=parsed_template_id,
+        topic=topic,
+        target_minutes=target_minutes,
+        created_by=user.id,
+    )
+    db.add(interview)
+    await db.flush()
+
+    # Redirect to the interview detail page
+    return RedirectResponse(
+        url=f"/admin/interviews/{interview.id}",
+        status_code=303,
     )
 
 
