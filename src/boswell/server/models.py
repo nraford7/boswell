@@ -17,8 +17,8 @@ class Base(DeclarativeBase):
     pass
 
 
-class GuestStatus(str, enum.Enum):
-    """Status of a guest's interview participation."""
+class InterviewStatus(str, enum.Enum):
+    """Status of an interview."""
 
     invited = "invited"
     started = "started"
@@ -41,7 +41,7 @@ def generate_magic_token() -> str:
 
 
 class Team(Base):
-    """A team that owns interviews, templates, and users."""
+    """A team that owns projects, templates, and users."""
 
     __tablename__ = "teams"
 
@@ -58,8 +58,8 @@ class Team(Base):
     templates: Mapped[list["InterviewTemplate"]] = relationship(
         "InterviewTemplate", back_populates="team", cascade="all, delete-orphan"
     )
-    interviews: Mapped[list["Interview"]] = relationship(
-        "Interview", back_populates="team", cascade="all, delete-orphan"
+    projects: Mapped[list["Project"]] = relationship(
+        "Project", back_populates="team", cascade="all, delete-orphan"
     )
 
 
@@ -101,15 +101,15 @@ class InterviewTemplate(Base):
 
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="templates")
-    interviews: Mapped[list["Interview"]] = relationship(
-        "Interview", back_populates="template"
+    projects: Mapped[list["Project"]] = relationship(
+        "Project", back_populates="template"
     )
 
 
-class Interview(Base):
-    """A specific interview with generated questions."""
+class Project(Base):
+    """A project containing one or more interviews."""
 
-    __tablename__ = "interviews"
+    __tablename__ = "interviews"  # Keep table name to avoid migration
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     team_id: Mapped[UUID] = mapped_column(
@@ -130,22 +130,22 @@ class Interview(Base):
     )
 
     # Relationships
-    team: Mapped["Team"] = relationship("Team", back_populates="interviews")
+    team: Mapped["Team"] = relationship("Team", back_populates="projects")
     template: Mapped[Optional["InterviewTemplate"]] = relationship(
-        "InterviewTemplate", back_populates="interviews"
+        "InterviewTemplate", back_populates="projects"
     )
-    guests: Mapped[list["Guest"]] = relationship(
-        "Guest", back_populates="interview", cascade="all, delete-orphan"
+    interviews: Mapped[list["Interview"]] = relationship(
+        "Interview", back_populates="project", cascade="all, delete-orphan"
     )
 
 
-class Guest(Base):
-    """A guest invited to participate in an interview."""
+class Interview(Base):
+    """A 1:1 interview with a specific person."""
 
-    __tablename__ = "guests"
+    __tablename__ = "guests"  # Keep table name to avoid migration
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    interview_id: Mapped[UUID] = mapped_column(
+    project_id: Mapped[UUID] = mapped_column(
         ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -154,8 +154,8 @@ class Guest(Base):
     magic_token: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, default=generate_magic_token
     )
-    status: Mapped[GuestStatus] = mapped_column(
-        Enum(GuestStatus), default=GuestStatus.invited, nullable=False
+    status: Mapped[InterviewStatus] = mapped_column(
+        Enum(InterviewStatus, name="gueststatus"), default=InterviewStatus.invited, nullable=False
     )
     room_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     room_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -177,22 +177,22 @@ class Guest(Base):
     )
 
     # Relationships
-    interview: Mapped["Interview"] = relationship("Interview", back_populates="guests")
+    project: Mapped["Project"] = relationship("Project", back_populates="interviews")
     transcript: Mapped[Optional["Transcript"]] = relationship(
-        "Transcript", back_populates="guest", uselist=False, cascade="all, delete-orphan"
+        "Transcript", back_populates="interview", uselist=False, cascade="all, delete-orphan"
     )
     analysis: Mapped[Optional["Analysis"]] = relationship(
-        "Analysis", back_populates="guest", uselist=False, cascade="all, delete-orphan"
+        "Analysis", back_populates="interview", uselist=False, cascade="all, delete-orphan"
     )
 
 
 class Transcript(Base):
-    """Transcript of a guest's interview conversation."""
+    """Transcript of an interview conversation."""
 
     __tablename__ = "transcripts"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    guest_id: Mapped[UUID] = mapped_column(
+    interview_id: Mapped[UUID] = mapped_column(
         ForeignKey("guests.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     entries: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -202,7 +202,7 @@ class Transcript(Base):
     )
 
     # Relationships
-    guest: Mapped["Guest"] = relationship("Guest", back_populates="transcript")
+    interview: Mapped["Interview"] = relationship("Interview", back_populates="transcript")
 
 
 class Analysis(Base):
@@ -211,7 +211,7 @@ class Analysis(Base):
     __tablename__ = "analyses"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    guest_id: Mapped[UUID] = mapped_column(
+    interview_id: Mapped[UUID] = mapped_column(
         ForeignKey("guests.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     insights: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -221,7 +221,7 @@ class Analysis(Base):
     )
 
     # Relationships
-    guest: Mapped["Guest"] = relationship("Guest", back_populates="analysis")
+    interview: Mapped["Interview"] = relationship("Interview", back_populates="analysis")
 
 
 class JobQueue(Base):

@@ -18,4 +18,4 @@ set -e
 echo "Starting Boswell voice worker..."
 
 # Start the voice worker
-exec python -m boswell.server.worker
+exec python -m boswell.server

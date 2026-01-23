@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Rejoin Interview: {{ interview.topic }} - Boswell{% endblock %}
+{% block title %}Rejoin Interview: {{ project.topic }} - Boswell{% endblock %}
 
 {% block body %}
 <div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
     <div class="card" style="max-width: 600px; width: 100%;">
-        <h1 class="mb-4">{{ interview.topic }}</h1>
+        <h1 class="mb-4">{{ project.topic }}</h1>
         <p class="mb-4" style="font-size: 1.25rem;">Welcome back!</p>
 
         <div class="mb-4">
@@ -13,10 +13,10 @@
             <p class="text-muted">Click the button below to rejoin your interview room.</p>
         </div>
 
-        <a href="/i/{{ guest.magic_token }}/room" class="btn" style="width: 100%; display: block; text-align: center;">Rejoin Interview</a>
+        <a href="/i/{{ interview.magic_token }}/room" class="btn" style="width: 100%; display: block; text-align: center;">Rejoin Interview</a>
 
         <div class="text-center" style="margin-top: 1.5rem;">
-            <a href="/i/{{ guest.magic_token }}" class="text-muted" style="font-size: 0.875rem;">Start Over</a>
+            <a href="/i/{{ interview.magic_token }}" class="text-muted" style="font-size: 0.875rem;">Start Over</a>
         </div>
     </div>
 </div>

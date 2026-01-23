@@ -1,55 +1,132 @@
 {% extends "base.html" %}
 
-{% block title %}Templates - Boswell{% endblock %}
+{% block title %}Interview Types - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 400;
+        color: var(--fg);
+    }
+
+    .templates-table {
+        width: 100%;
+    }
+
+    .templates-table td {
+        vertical-align: middle;
+    }
+
+    .template-name {
+        font-weight: 500;
+        color: var(--fg);
+    }
+
+    .template-desc {
+        max-width: 300px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .actions-cell {
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .actions-cell .btn {
+        margin-left: 0.5rem;
+    }
+
+    .btn-danger {
+        color: var(--error);
+        border-color: var(--error);
+    }
+
+    .btn-danger:hover {
+        background: var(--error-bg);
+        border-color: var(--error);
+        color: var(--error);
+    }
+
+    /* Animate rows on load */
+    .templates-table tbody tr {
+        animation: fadeIn 0.4s ease forwards;
+        opacity: 0;
+    }
+
+    .templates-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
+    .templates-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
+    .templates-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
+    .templates-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
+    .templates-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
+</style>
+{% endblock %}
 
 {% block body %}
 <nav class="nav">
     <div class="nav-content">
-        <a href="/admin/" class="nav-brand">Boswell</a>
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
         <div class="nav-links">
             <a href="/admin/">Dashboard</a>
-            <a href="/admin/templates">Templates</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
             <span class="text-muted">{{ user.name }}</span>
             <form method="post" action="/admin/logout" style="display: inline;">
-                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+                <button type="submit" class="btn-ghost">Logout</button>
             </form>
         </div>
     </div>
 </nav>
 
-<div class="container" style="padding-top: 2rem;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h1>Templates</h1>
-        <a href="/admin/templates/new" class="btn">New Template</a>
+<div class="container">
+    <div class="page-header">
+        <h1 class="page-title">Interview Types</h1>
+        <a href="/admin/templates/new" class="btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+            </svg>
+            New Interview Type
+        </a>
     </div>
 
     <div class="card">
         {% if templates %}
-        <table>
+        <table class="templates-table">
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Description</th>
                     <th>Default Duration</th>
-                    <th>Actions</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for template in templates %}
                 <tr>
-                    <td>{{ template.name }}</td>
-                    <td>
+                    <td class="template-name">{{ template.name }}</td>
+                    <td class="template-desc text-muted">
                         {% if template.description %}
-                            {{ template.description[:50] }}{% if template.description|length > 50 %}...{% endif %}
+                            {{ template.description[:60] }}{% if template.description|length > 60 %}...{% endif %}
                         {% else %}
-                            <span class="text-muted">-</span>
+                            <span class="text-dim">-</span>
                         {% endif %}
                     </td>
-                    <td>{{ template.default_minutes }} min</td>
-                    <td>
-                        <a href="/admin/templates/{{ template.id }}/edit" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">Edit</a>
-                        <form method="post" action="/admin/templates/{{ template.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this template?');">
-                            <button type="submit" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.875rem; color: #dc3545; border-color: #dc3545;">Delete</button>
+                    <td class="text-muted">{{ template.default_minutes }} min</td>
+                    <td class="actions-cell">
+                        <a href="/admin/templates/{{ template.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
+                        <form method="post" action="/admin/templates/{{ template.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this interview type?');">
+                            <button type="submit" class="btn btn-outline btn-sm btn-danger">Delete</button>
                         </form>
                     </td>
                 </tr>
@@ -57,9 +134,13 @@
             </tbody>
         </table>
         {% else %}
-        <p class="text-muted text-center" style="padding: 2rem 0;">
-            No templates yet. <a href="/admin/templates/new">Create your first template</a> to get started.
-        </p>
+        <div class="empty-state">
+            <svg style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.3;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p>No interview types yet.</p>
+            <a href="/admin/templates/new" style="color: var(--accent);">Create your first interview type</a>
+        </div>
         {% endif %}
     </div>
 </div>

@@ -17,20 +17,34 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create ENUM types first
+    # Create ENUM types first using raw SQL with DO block for idempotency
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE gueststatus AS ENUM ('invited', 'started', 'completed', 'expired');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE jobstatus AS ENUM ('pending', 'processing', 'completed', 'failed');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Reference the enum types for use in table columns
     guest_status = postgresql.ENUM(
         "invited", "started", "completed", "expired",
         name="gueststatus",
-        create_type=True,
+        create_type=False,
     )
-    guest_status.create(op.get_bind(), checkfirst=True)
-
     job_status = postgresql.ENUM(
         "pending", "processing", "completed", "failed",
         name="jobstatus",
-        create_type=True,
+        create_type=False,
     )
-    job_status.create(op.get_bind(), checkfirst=True)
 
     # Teams
     op.create_table(

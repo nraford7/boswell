@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from boswell.server.config import get_settings
 from boswell.server.database import get_session
+from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
 from boswell.server.models import Team, User
 
@@ -166,12 +167,22 @@ async def login_submit(
     token = create_login_token(normalized_email)
     login_link = f"{settings.base_url}/admin/verify?token={token}"
 
-    # For now, display the link (in production, send via email)
-    return templates.TemplateResponse(
-        request=request,
-        name="admin/login.html",
-        context={"message": f"Login link: {login_link}"},
-    )
+    # Send magic link via email
+    email_sent = await send_admin_login_email(to=normalized_email, login_link=login_link)
+
+    if email_sent:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "Check your email for a login link."},
+        )
+    else:
+        # Fallback: display link if email fails
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": f"Email failed. Login link: {login_link}"},
+        )
 
 
 @router.get("/verify")

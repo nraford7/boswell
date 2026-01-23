@@ -1,9 +1,9 @@
 # src/boswell/server/worker.py
 """Voice worker for conducting interviews.
 
-This worker polls for guests who have started their interviews (status="started"
+This worker polls for interviews that have started (status="started"
 with a room_name) and launches the Pipecat voice pipeline to conduct the interview.
-When the interview completes, it saves the transcript and updates the guest status.
+When the interview completes, it saves the transcript and updates the interview status.
 """
 
 import asyncio
@@ -17,19 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from boswell.server.database import get_session_context
-from boswell.server.models import Guest, GuestStatus, Interview, Transcript
+from boswell.server.models import Interview, InterviewStatus, Project, Transcript
 from boswell.voice.pipeline import run_interview
 from boswell.voice.prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
 
 # Track active interviews to prevent duplicate bot sessions
-# Maps guest_id -> asyncio.Task
+# Maps interview_id -> asyncio.Task
 _active_interviews: dict[UUID, asyncio.Task] = {}
 
 
-def _extract_questions_list(interview: Interview) -> list[str]:
-    """Extract question text list from interview.questions JSONB.
+def _extract_questions_list(project: Project) -> list[str]:
+    """Extract question text list from project.questions JSONB.
 
     The questions field has structure:
     {
@@ -40,54 +40,54 @@ def _extract_questions_list(interview: Interview) -> list[str]:
     }
 
     Args:
-        interview: The Interview model instance.
+        project: The Project model instance.
 
     Returns:
         List of question text strings.
     """
-    if not interview.questions:
+    if not project.questions:
         return []
 
-    questions_data = interview.questions.get("questions", [])
+    questions_data = project.questions.get("questions", [])
     return [q.get("text", "") for q in questions_data if q.get("text")]
 
 
-async def start_interview_for_guest(
-    guest: Guest,
+async def start_voice_interview(
     interview: Interview,
+    project: Project,
 ) -> tuple[list[dict[str, Any]], list[dict]]:
-    """Start a voice interview for a guest.
+    """Start a voice interview.
 
     Args:
-        guest: The Guest model instance with room_name and room_token.
-        interview: The Interview model instance with topic and questions.
+        interview: The Interview model instance with room_name and room_token.
+        project: The Project model instance with topic and questions.
 
     Returns:
         Tuple of (transcript entries, conversation history).
 
     Raises:
-        ValueError: If guest is missing room credentials.
+        ValueError: If interview is missing room credentials.
         RuntimeError: If the pipeline fails to start.
     """
-    if not guest.room_name:
-        raise ValueError(f"Guest {guest.id} has no room_name")
+    if not interview.room_name:
+        raise ValueError(f"Interview {interview.id} has no room_name")
 
     # Build room URL from room_name
-    # The room_name is like "boswell-{guest_id[:8]}"
-    room_url = f"https://boswell.daily.co/{guest.room_name}"
+    # The room_name is like "boswell-{interview_id[:8]}"
+    room_url = f"https://boswell.daily.co/{interview.room_name}"
 
-    # Get the bot token (stored in guest.room_token)
-    # Note: In current implementation, room_token is a guest token
+    # Get the bot token (stored in interview.room_token)
+    # Note: In current implementation, room_token is an interview token
     # We need a bot token for the pipeline
-    # For now, we'll use the guest token as a placeholder
+    # For now, we'll use the interview token as a placeholder
     # TODO: Generate proper bot token when creating room
-    room_token = guest.room_token or ""
+    room_token = interview.room_token or ""
 
-    # Extract questions from interview
-    questions = _extract_questions_list(interview)
+    # Extract questions from project
+    questions = _extract_questions_list(project)
     if not questions:
         logger.warning(
-            f"Interview {interview.id} has no questions, using default greeting"
+            f"Project {project.id} has no questions, using default greeting"
         )
         questions = [
             "Can you tell me a bit about yourself and your background?",
@@ -97,16 +97,16 @@ async def start_interview_for_guest(
 
     # Build the system prompt
     system_prompt = build_system_prompt(
-        topic=interview.topic,
+        topic=project.topic,
         questions=questions,
-        research_summary=interview.research_summary,
-        target_minutes=interview.target_minutes,
-        max_minutes=interview.target_minutes + 15,  # Allow 15 min buffer
+        research_summary=project.research_summary,
+        target_minutes=project.target_minutes,
+        max_minutes=project.target_minutes + 15,  # Allow 15 min buffer
     )
 
     logger.info(
-        f"Starting voice interview for guest {guest.id} "
-        f"(room={guest.room_name}, topic='{interview.topic}')"
+        f"Starting voice interview {interview.id} "
+        f"(room={interview.room_name}, topic='{project.topic}')"
     )
 
     # Run the Pipecat pipeline (blocks until interview ends)
@@ -118,7 +118,7 @@ async def start_interview_for_guest(
     )
 
     logger.info(
-        f"Interview completed for guest {guest.id}: "
+        f"Interview completed for {interview.id}: "
         f"{len(transcript_entries)} transcript entries"
     )
 
@@ -127,17 +127,17 @@ async def start_interview_for_guest(
 
 async def save_transcript(
     db: AsyncSession,
-    guest_id: UUID,
+    interview_id: UUID,
     entries: list[dict[str, Any]],
     conversation_context: list[dict],
 ) -> Transcript:
     """Save interview transcript to database.
 
-    Creates a new Transcript record or updates existing one for the guest.
+    Creates a new Transcript record or updates existing one for the interview.
 
     Args:
         db: Database session.
-        guest_id: UUID of the guest.
+        interview_id: UUID of the interview.
         entries: List of transcript entry dictionaries.
         conversation_context: List of conversation messages (for potential resume).
 
@@ -146,7 +146,7 @@ async def save_transcript(
     """
     # Check if transcript already exists
     result = await db.execute(
-        select(Transcript).where(Transcript.guest_id == guest_id)
+        select(Transcript).where(Transcript.interview_id == interview_id)
     )
     transcript = result.scalar_one_or_none()
 
@@ -158,115 +158,115 @@ async def save_transcript(
         else:
             transcript.entries = entries
         transcript.conversation_context = conversation_context
-        logger.info(f"Updated existing transcript for guest {guest_id}")
+        logger.info(f"Updated existing transcript for interview {interview_id}")
     else:
         # Create new transcript
         transcript = Transcript(
-            guest_id=guest_id,
+            interview_id=interview_id,
             entries=entries,
             conversation_context=conversation_context,
         )
         db.add(transcript)
-        logger.info(f"Created new transcript for guest {guest_id}")
+        logger.info(f"Created new transcript for interview {interview_id}")
 
     await db.flush()
     return transcript
 
 
-async def complete_guest_interview(
+async def complete_interview(
     db: AsyncSession,
-    guest_id: UUID,
+    interview_id: UUID,
     transcript_entries: list[dict[str, Any]],
     conversation_history: list[dict],
 ) -> None:
-    """Complete a guest's interview by saving transcript and updating status.
+    """Complete an interview by saving transcript and updating status.
 
     Args:
         db: Database session.
-        guest_id: UUID of the guest.
+        interview_id: UUID of the interview.
         transcript_entries: List of transcript entry dictionaries.
         conversation_history: List of conversation messages.
     """
     # Save transcript
-    await save_transcript(db, guest_id, transcript_entries, conversation_history)
+    await save_transcript(db, interview_id, transcript_entries, conversation_history)
 
-    # Update guest status to completed
-    result = await db.execute(select(Guest).where(Guest.id == guest_id))
-    guest = result.scalar_one_or_none()
+    # Update interview status to completed
+    result = await db.execute(select(Interview).where(Interview.id == interview_id))
+    interview = result.scalar_one_or_none()
 
-    if guest:
-        guest.status = GuestStatus.completed
-        guest.completed_at = datetime.now(timezone.utc)
+    if interview:
+        interview.status = InterviewStatus.completed
+        interview.completed_at = datetime.now(timezone.utc)
         await db.flush()
-        logger.info(f"Guest {guest_id} marked as completed")
+        logger.info(f"Interview {interview_id} marked as completed")
 
 
-async def run_interview_task(guest_id: UUID) -> None:
+async def run_interview_task(interview_id: UUID) -> None:
     """Task wrapper for running a single interview.
 
     This function is spawned as an asyncio task for each interview.
     It handles the full lifecycle: start interview, save transcript, update status.
 
     Args:
-        guest_id: UUID of the guest to interview.
+        interview_id: UUID of the interview to run.
     """
     try:
-        # Fetch guest and interview data
+        # Fetch interview and project data
         async with get_session_context() as db:
             result = await db.execute(
-                select(Guest)
-                .options(selectinload(Guest.interview))
-                .where(Guest.id == guest_id)
+                select(Interview)
+                .options(selectinload(Interview.project))
+                .where(Interview.id == interview_id)
             )
-            guest = result.scalar_one_or_none()
+            interview = result.scalar_one_or_none()
 
-            if not guest:
-                logger.error(f"Guest {guest_id} not found")
+            if not interview:
+                logger.error(f"Interview {interview_id} not found")
                 return
 
-            if not guest.interview:
-                logger.error(f"Guest {guest_id} has no interview")
+            if not interview.project:
+                logger.error(f"Interview {interview_id} has no project")
                 return
 
             # Cache the data we need (relationships won't be accessible outside session)
-            interview = guest.interview
-            room_name = guest.room_name
-            room_token = guest.room_token
+            project = interview.project
+            room_name = interview.room_name
+            room_token = interview.room_token
 
-        # Create a minimal guest object for the interview
+        # Create a minimal interview object for the voice session
         # (We can't use the SQLAlchemy object outside the session)
-        class GuestData:
+        class InterviewData:
             def __init__(self, id, room_name, room_token):
                 self.id = id
                 self.room_name = room_name
                 self.room_token = room_token
 
-        guest_data = GuestData(guest_id, room_name, room_token)
+        interview_data = InterviewData(interview_id, room_name, room_token)
 
         # Run the interview (this blocks until complete)
-        transcript_entries, conversation_history = await start_interview_for_guest(
-            guest_data, interview
+        transcript_entries, conversation_history = await start_voice_interview(
+            interview_data, project
         )
 
         # Save results in a new session
         async with get_session_context() as db:
-            await complete_guest_interview(
-                db, guest_id, transcript_entries, conversation_history
+            await complete_interview(
+                db, interview_id, transcript_entries, conversation_history
             )
 
     except Exception as e:
-        logger.exception(f"Interview failed for guest {guest_id}: {e}")
+        logger.exception(f"Interview failed for {interview_id}: {e}")
         # Don't mark as failed - leave as "started" so it can be retried
         # or manually resolved
 
     finally:
         # Remove from active interviews
-        _active_interviews.pop(guest_id, None)
-        logger.info(f"Interview task ended for guest {guest_id}")
+        _active_interviews.pop(interview_id, None)
+        logger.info(f"Interview task ended for {interview_id}")
 
 
-async def find_pending_guests(db: AsyncSession) -> list[Guest]:
-    """Find guests who are ready for an interview but don't have an active bot.
+async def find_pending_interviews(db: AsyncSession) -> list[Interview]:
+    """Find interviews that are ready to run but don't have an active bot.
 
     Criteria:
     - status = "started"
@@ -277,22 +277,22 @@ async def find_pending_guests(db: AsyncSession) -> list[Guest]:
         db: Database session.
 
     Returns:
-        List of Guest objects ready for interviews.
+        List of Interview objects ready to run.
     """
     result = await db.execute(
-        select(Guest)
-        .options(selectinload(Guest.interview))
+        select(Interview)
+        .options(selectinload(Interview.project))
         .where(
             and_(
-                Guest.status == GuestStatus.started,
-                Guest.room_name.isnot(None),
+                Interview.status == InterviewStatus.started,
+                Interview.room_name.isnot(None),
             )
         )
     )
-    guests = list(result.scalars().all())
+    interviews = list(result.scalars().all())
 
-    # Filter out guests with active interviews
-    pending = [g for g in guests if g.id not in _active_interviews]
+    # Filter out interviews that are already active
+    pending = [i for i in interviews if i.id not in _active_interviews]
 
     return pending
 
@@ -303,11 +303,11 @@ async def run_voice_worker(
 ) -> None:
     """Main voice worker loop.
 
-    Polls for guests with status="started" and room_name set,
-    then starts interview bots for each eligible guest.
+    Polls for interviews with status="started" and room_name set,
+    then starts interview bots for each eligible interview.
 
     Args:
-        poll_interval: Seconds to wait between polling when no guests found.
+        poll_interval: Seconds to wait between polling when no interviews found.
         max_iterations: Maximum number of poll iterations (None for infinite).
             Useful for testing.
     """
@@ -319,21 +319,21 @@ async def run_voice_worker(
 
         try:
             async with get_session_context() as db:
-                pending_guests = await find_pending_guests(db)
+                pending_interviews = await find_pending_interviews(db)
 
-                if pending_guests:
-                    logger.info(f"Found {len(pending_guests)} pending guest(s)")
+                if pending_interviews:
+                    logger.info(f"Found {len(pending_interviews)} pending interview(s)")
 
-                for guest in pending_guests:
-                    # Start interview task for this guest
+                for interview in pending_interviews:
+                    # Start interview task
                     logger.info(
-                        f"Starting interview for guest {guest.id} "
-                        f"(room={guest.room_name})"
+                        f"Starting interview {interview.id} "
+                        f"(room={interview.room_name})"
                     )
 
                     # Create and track the task
-                    task = asyncio.create_task(run_interview_task(guest.id))
-                    _active_interviews[guest.id] = task
+                    task = asyncio.create_task(run_interview_task(interview.id))
+                    _active_interviews[interview.id] = task
 
         except Exception as e:
             logger.exception(f"Voice worker error: {e}")
@@ -356,9 +356,9 @@ async def shutdown_voice_worker() -> None:
     logger.info(f"Shutting down {len(_active_interviews)} active interview(s)")
 
     # Cancel all tasks
-    for guest_id, task in _active_interviews.items():
+    for interview_id, task in _active_interviews.items():
         if not task.done():
-            logger.info(f"Cancelling interview for guest {guest_id}")
+            logger.info(f"Cancelling interview {interview_id}")
             task.cancel()
 
     # Wait for all tasks to complete
@@ -378,13 +378,13 @@ def get_active_interview_count() -> int:
     return len(_active_interviews)
 
 
-def is_interview_active(guest_id: UUID) -> bool:
-    """Check if an interview is currently active for a guest.
+def is_interview_active(interview_id: UUID) -> bool:
+    """Check if an interview is currently active.
 
     Args:
-        guest_id: UUID of the guest.
+        interview_id: UUID of the interview.
 
     Returns:
         True if an interview is active, False otherwise.
     """
-    return guest_id in _active_interviews
+    return interview_id in _active_interviews

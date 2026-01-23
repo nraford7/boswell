@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.topic }} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 400;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .interview-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 0;
+    }
+
+    .meta-item {
+        background-color: var(--bg-surface);
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+
+    .meta-label {
+        font-size: 0.6875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-dim);
+        margin-bottom: 0.375rem;
+    }
+
+    .meta-value {
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--fg);
+    }
+
+    .research-section {
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .research-section h3 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--fg);
+        margin-bottom: 1rem;
+    }
+
+    .research-summary {
+        white-space: pre-wrap;
+        color: var(--fg-muted);
+        font-size: 0.9375rem;
+        line-height: 1.6;
+    }
+
+    .questions-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: question;
+    }
+
+    .questions-list li {
+        counter-increment: question;
+        display: flex;
+        gap: 1rem;
+        padding: 0.875rem 0;
+        border-bottom: 1px solid var(--border);
+        color: var(--fg-muted);
+        font-size: 0.9375rem;
+        line-height: 1.5;
+    }
+
+    .questions-list li:last-child {
+        border-bottom: none;
+    }
+
+    .questions-list li::before {
+        content: counter(question);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background: var(--accent-subtle);
+        color: var(--accent);
+        border-radius: 50%;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .guests-table {
+        width: 100%;
+    }
+
+    .guests-table td {
+        vertical-align: middle;
+    }
+
+    .guest-name {
+        font-weight: 500;
+        color: var(--fg);
+    }
+
+    .guest-email {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+    }
+
+    .guest-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+    }
+
+    /* Status badge styling with user-friendly labels */
+    .status-uninvited {
+        background-color: var(--bg-hover);
+        color: var(--fg-dim);
+    }
+
+    .status-invited {
+        background-color: rgba(212, 168, 85, 0.15);
+        color: var(--accent);
+    }
+
+    .status-started {
+        background-color: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
+    }
+
+    .status-completed {
+        background-color: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
+    }
+
+    .actions-cell {
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .actions-cell .btn {
+        margin-left: 0.5rem;
+    }
+
+    /* Invitation link */
+    .invite-link-cell {
+        max-width: 200px;
+    }
+
+    .invite-link-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .invite-link {
+        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+        font-size: 0.75rem;
+        color: var(--fg-dim);
+        background: var(--bg-surface);
+        padding: 0.375rem 0.5rem;
+        border-radius: var(--radius-sm);
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--fg-dim);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .copy-btn:hover {
+        background: var(--accent-subtle);
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .copy-btn.copied {
+        background: var(--success-bg);
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    /* Animate rows on load */
+    .guests-table tbody tr {
+        animation: fadeIn 0.4s ease forwards;
+        opacity: 0;
+    }
+
+    .guests-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
+    .guests-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
+    .guests-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
+    .guests-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
+    .guests-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Dashboard</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Dashboard
+        </a>
+        <h1 class="page-title">{{ project.topic }}</h1>
+    </div>
+
+    <div class="card">
+        <div class="interview-meta">
+            {% if project.template %}
+            <div class="meta-item">
+                <div class="meta-label">Interview Type</div>
+                <div class="meta-value">{{ project.template.name }}</div>
+            </div>
+            {% endif %}
+            <div class="meta-item">
+                <div class="meta-label">Target Duration</div>
+                <div class="meta-value">{{ project.target_minutes }} minutes</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Created</div>
+                <div class="meta-value">{{ project.created_at.strftime('%b %d, %Y') }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Interviews</div>
+                <div class="meta-value">{{ interviews|length if interviews else 0 }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if project.research_summary %}
+    <div class="card">
+        <div class="research-section" style="margin-bottom: 0; border: none; padding: 0; background: transparent;">
+            <h3>Research Summary</h3>
+            <div class="research-summary">{{ project.research_summary }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if project.questions and project.questions.questions %}
+    <div class="card">
+        <h3 style="margin-bottom: 1rem;">Generated Questions</h3>
+        <ol class="questions-list">
+            {% for question in project.questions.questions %}
+            <li>{{ question }}</li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="section-header">
+            <h2>Interviews</h2>
+            <a href="/admin/projects/{{ project.id }}/invite" class="btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+                Add Interview
+            </a>
+        </div>
+
+        {% if interviews %}
+        <table class="guests-table">
+            <thead>
+                <tr>
+                    <th>Interviewee</th>
+                    <th>Status</th>
+                    <th>Invitation Link</th>
+                    <th>Completed</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for interview in interviews %}
+                <tr>
+                    <td>
+                        <div class="guest-info">
+                            <span class="guest-name">{{ interview.name }}</span>
+                            <span class="guest-email">{{ interview.email }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if interview.status.value == 'completed' %}
+                        <span class="badge status-completed">Finished</span>
+                        {% elif interview.status.value == 'started' %}
+                        <span class="badge status-started">Interview Started</span>
+                        {% elif interview.status.value == 'invited' %}
+                        <span class="badge status-invited">Invite Sent</span>
+                        {% else %}
+                        <span class="badge status-uninvited">Uninvited</span>
+                        {% endif %}
+                    </td>
+                    <td class="invite-link-cell">
+                        {% if interview.magic_token %}
+                        <div class="invite-link-wrapper">
+                            <span class="invite-link" id="link-{{ interview.id }}">{{ base_url }}/i/{{ interview.magic_token }}</span>
+                            <button type="button" class="copy-btn" onclick="copyLink('{{ base_url }}/i/{{ interview.magic_token }}', this)" title="Copy link">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        {% else %}
+                        <span class="text-dim">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ interview.completed_at.strftime('%b %d, %Y') if interview.completed_at else '-' }}</td>
+                    <td class="actions-cell">
+                        {% if interview.status.value == 'completed' and interview.transcript %}
+                        <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript" class="btn btn-outline btn-sm">Transcript</a>
+                        {% endif %}
+                        {% if interview.status.value in ['invited', 'started'] %}
+                        <button type="button" class="btn btn-outline btn-sm"
+                                hx-post="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/remind"
+                                hx-swap="none"
+                                hx-confirm="Send reminder email to {{ interview.name }}?">
+                            Remind
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <svg style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.3;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <p>No interviews yet.</p>
+            <a href="/admin/projects/{{ project.id }}/invite" style="color: var(--accent);">Add your first interview</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function copyLink(link, btn) {
+    navigator.clipboard.writeText(link).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg>';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>';
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

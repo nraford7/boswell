@@ -2,32 +2,228 @@
 
 {% block title %}Thank You - Boswell{% endblock %}
 
-{% block body %}
-<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
-    <div class="card" style="max-width: 600px; width: 100%;">
-        <h1 class="mb-4">Thank You</h1>
-        <p style="font-size: 1.25rem; margin-bottom: 1.5rem;">Your interview on <strong>{{ interview.topic }}</strong> has been recorded.</p>
+{% block head %}
+<style>
+    .thankyou-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 2rem;
+        position: relative;
+    }
 
-        <div class="mb-4">
-            <h3 class="mb-2">What happens next?</h3>
-            <ul style="padding-left: 1.5rem; color: var(--muted);">
-                <li class="mb-2"><strong>Transcript:</strong> A full transcript of your conversation will be emailed to you shortly.</li>
-                <li class="mb-2"><strong>Privacy:</strong> Your responses are anonymous by default. Your identity will not be shared without your explicit consent.</li>
+    .thankyou-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 600px;
+        height: 300px;
+        background: radial-gradient(ellipse at center top, rgba(34, 197, 94, 0.1) 0%, transparent 70%);
+        opacity: 0.8;
+        pointer-events: none;
+    }
+
+    .thankyou-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 3rem;
+        width: 100%;
+        max-width: 600px;
+        position: relative;
+        animation: fadeIn 0.6s ease forwards;
+    }
+
+    .thankyou-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--success), transparent);
+    }
+
+    .success-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.5rem;
+        background: var(--success-bg);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .success-icon svg {
+        width: 32px;
+        height: 32px;
+        color: var(--success);
+    }
+
+    .thankyou-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .thankyou-title {
+        font-family: var(--font-display);
+        font-size: 2.5rem;
+        font-weight: 400;
+        color: var(--fg);
+        margin-bottom: 0.75rem;
+    }
+
+    .thankyou-topic {
+        font-size: 1.125rem;
+        color: var(--fg-muted);
+    }
+
+    .thankyou-topic strong {
+        color: var(--accent);
+        font-weight: 500;
+    }
+
+    .next-steps {
+        margin-bottom: 2rem;
+    }
+
+    .next-steps h3 {
+        font-family: var(--font-body);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-dim);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .next-steps h3::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+
+    .next-steps-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .next-steps-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.875rem 0;
+        border-bottom: 1px solid var(--border);
+        color: var(--fg-muted);
+        font-size: 0.9375rem;
+        line-height: 1.5;
+    }
+
+    .next-steps-list li:last-child {
+        border-bottom: none;
+    }
+
+    .next-steps-list .icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        color: var(--success);
+        margin-top: 0.125rem;
+    }
+
+    .next-steps-list strong {
+        color: var(--fg);
+        font-weight: 500;
+    }
+
+    .insights-preview {
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .insights-preview h4 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--fg);
+        margin-bottom: 0.75rem;
+    }
+
+    .insights-preview p {
+        font-size: 0.875rem;
+        color: var(--fg-muted);
+        white-space: pre-wrap;
+        line-height: 1.6;
+    }
+
+    .thankyou-footer {
+        text-align: center;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.875rem;
+        color: var(--fg-dim);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="thankyou-container">
+    <div class="thankyou-card">
+        <div class="success-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+        </div>
+
+        <div class="thankyou-header">
+            <h1 class="thankyou-title">Thank You</h1>
+            <p class="thankyou-topic">Your interview on <strong>{{ project.topic }}</strong> has been recorded.</p>
+        </div>
+
+        <div class="next-steps">
+            <h3>What happens next</h3>
+            <ul class="next-steps-list">
+                <li>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span><strong>Transcript:</strong> A full transcript of your conversation will be emailed to you shortly.</span>
+                </li>
+                <li>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span><strong>Privacy:</strong> Your responses are anonymous by default. Your identity will not be shared without your explicit consent.</span>
+                </li>
             </ul>
         </div>
 
-        {% if guest.analysis %}
-        <div class="mb-4" style="background-color: var(--bg); padding: 1.5rem; border-radius: 8px;">
-            <h3 class="mb-2">Insights Preview</h3>
-            {% if guest.analysis.summary_md %}
-            <p class="text-muted" style="white-space: pre-wrap;">{{ guest.analysis.summary_md[:500] }}{% if guest.analysis.summary_md|length > 500 %}...{% endif %}</p>
-            {% elif guest.analysis.insights %}
-            <p class="text-muted">Analysis is available. A detailed summary will be included in your email.</p>
+        {% if interview.analysis %}
+        <div class="insights-preview">
+            <h4>Insights Preview</h4>
+            {% if interview.analysis.summary_md %}
+            <p>{{ interview.analysis.summary_md[:500] }}{% if interview.analysis.summary_md|length > 500 %}...{% endif %}</p>
+            {% elif interview.analysis.insights %}
+            <p>Analysis is available. A detailed summary will be included in your email.</p>
             {% endif %}
         </div>
         {% endif %}
 
-        <p class="text-muted text-center" style="margin-top: 2rem;">You may now close this window.</p>
+        <div class="thankyou-footer">
+            You may now close this window.
+        </div>
     </div>
 </div>
 {% endblock %}

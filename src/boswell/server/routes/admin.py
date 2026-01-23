@@ -1,9 +1,12 @@
 # src/boswell/server/routes/admin.py
 """Admin routes for dashboard and interview management."""
 
+import asyncio
 import csv
 import io
 import logging
+import tempfile
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -13,10 +16,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from boswell.server.config import get_settings
 from boswell.server.database import get_session
+from boswell.server.email import send_invitation_email
 from boswell.server.main import templates
-from boswell.server.models import Guest, GuestStatus, Interview, InterviewTemplate, User
+from boswell.server.models import Interview, InterviewStatus, Project, InterviewTemplate, User
 from boswell.server.routes.auth import get_current_user
+
+# Import ingestion functions
+try:
+    from boswell.ingestion import read_document, fetch_url, generate_questions
+    INGESTION_AVAILABLE = True
+except ImportError:
+    INGESTION_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +38,12 @@ router = APIRouter(prefix="/admin")
 # -----------------------------------------------------------------------------
 # Dependencies
 # -----------------------------------------------------------------------------
+
+
+class AuthRedirect(Exception):
+    """Custom exception to trigger auth redirect."""
+    def __init__(self, url: str):
+        self.url = url
 
 
 async def require_auth(
@@ -44,10 +62,14 @@ async def require_auth(
         The authenticated User object.
 
     Raises:
-        RedirectResponse: If user is not authenticated.
+        HTTPException: 401 if user is not authenticated.
     """
     if user is None:
-        raise RedirectResponse(url="/admin/login", status_code=303)
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+            headers={"Location": "/admin/login"},
+        )
     return user
 
 
@@ -62,49 +84,31 @@ async def dashboard(
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Dashboard home page showing list of interviews for the user's team."""
-    # Query interviews for the user's team with related data
+    """Dashboard home page showing list of projects for the user's team."""
+    # Query projects for the user's team with related data
     result = await db.execute(
-        select(Interview)
-        .where(Interview.team_id == user.team_id)
+        select(Project)
+        .where(Project.team_id == user.team_id)
         .options(
-            selectinload(Interview.template),
-            selectinload(Interview.guests),
+            selectinload(Project.template),
+            selectinload(Project.interviews),
         )
-        .order_by(Interview.created_at.desc())
+        .order_by(Project.created_at.desc())
     )
-    interviews = result.scalars().all()
-
-    # Build interview data with guest counts
-    interview_data = []
-    for interview in interviews:
-        guests = interview.guests
-        total_guests = len(guests)
-        completed_guests = sum(
-            1 for g in guests if g.status == GuestStatus.completed
-        )
-
-        interview_data.append({
-            "id": interview.id,
-            "topic": interview.topic,
-            "template_name": interview.template.name if interview.template else None,
-            "total_guests": total_guests,
-            "completed_guests": completed_guests,
-            "created_at": interview.created_at,
-        })
+    projects = result.scalars().all()
 
     return templates.TemplateResponse(
         request=request,
         name="admin/dashboard.html",
         context={
             "user": user,
-            "interviews": interview_data,
+            "projects": projects,
         },
     )
 
 
-@router.get("/interviews/new")
-async def interview_new_form(
+@router.get("/projects/new")
+async def project_new_form(
     request: Request,
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
@@ -120,7 +124,7 @@ async def interview_new_form(
 
     return templates.TemplateResponse(
         request=request,
-        name="admin/interview_new.html",
+        name="admin/project_new.html",
         context={
             "user": user,
             "templates": interview_templates,
@@ -128,16 +132,28 @@ async def interview_new_form(
     )
 
 
-@router.post("/interviews/new")
-async def interview_new_submit(
+@router.post("/projects/new")
+async def project_new_submit(
     request: Request,
     user: User = Depends(require_auth),
+    guest_name: str = Form(...),
+    guest_email: str = Form(...),
     topic: str = Form(...),
     template_id: Optional[str] = Form(None),
     target_minutes: int = Form(30),
+    research_urls: Optional[str] = Form(None),
+    research_files: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_session),
 ):
-    """Create a new interview."""
+    """Create a new interview with a guest."""
+    # Validate guest info
+    guest_name = guest_name.strip()
+    guest_email = guest_email.strip().lower()
+    if not guest_name:
+        raise HTTPException(status_code=400, detail="Interview name is required")
+    if not guest_email or "@" not in guest_email:
+        raise HTTPException(status_code=400, detail="Valid guest email is required")
+
     # Validate topic
     topic = topic.strip()
     if not topic:
@@ -165,55 +181,132 @@ async def interview_new_submit(
             status_code=400, detail="Duration must be between 5 and 120 minutes"
         )
 
-    # Create the interview
-    interview = Interview(
+    # Process research materials
+    research_parts = []
+    questions = None
+
+    # Process uploaded files
+    if research_files and INGESTION_AVAILABLE:
+        for upload_file in research_files:
+            if upload_file.filename and upload_file.size and upload_file.size > 0:
+                try:
+                    # Save to temp file and process
+                    suffix = Path(upload_file.filename).suffix
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        content = await upload_file.read()
+                        tmp.write(content)
+                        tmp_path = tmp.name
+
+                    # Read the document
+                    doc_content = await asyncio.to_thread(read_document, Path(tmp_path))
+                    if doc_content:
+                        research_parts.append(f"=== Document: {upload_file.filename} ===\n{doc_content}")
+
+                    # Clean up temp file
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Failed to process file {upload_file.filename}: {e}")
+
+    # Process URLs
+    if research_urls and INGESTION_AVAILABLE:
+        urls = [u.strip() for u in research_urls.split("\n") if u.strip()]
+        for url in urls:
+            if url.startswith("http://") or url.startswith("https://"):
+                try:
+                    url_content = await asyncio.to_thread(fetch_url, url)
+                    if url_content:
+                        research_parts.append(f"=== URL: {url} ===\n{url_content}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch URL {url}: {e}")
+
+    # Combine research summary
+    research_summary = "\n\n".join(research_parts) if research_parts else None
+
+    # Generate questions if we have research
+    if research_summary and INGESTION_AVAILABLE:
+        try:
+            questions_list = await asyncio.to_thread(
+                generate_questions, topic, research_summary, 12
+            )
+            if questions_list:
+                questions = {
+                    "questions": [
+                        {"id": i + 1, "text": q, "type": "generated"}
+                        for i, q in enumerate(questions_list)
+                    ]
+                }
+        except Exception as e:
+            logger.warning(f"Failed to generate questions: {e}")
+
+    # Create the project
+    project = Project(
         team_id=user.team_id,
         template_id=parsed_template_id,
         topic=topic,
         target_minutes=target_minutes,
         created_by=user.id,
+        research_summary=research_summary,
+        questions=questions,
+    )
+    db.add(project)
+    await db.flush()
+
+    # Create the interview (without sending email)
+    interview = Interview(
+        project_id=project.id,
+        email=guest_email,
+        name=guest_name,
     )
     db.add(interview)
     await db.flush()
 
-    # Redirect to the interview detail page
-    return RedirectResponse(
-        url=f"/admin/interviews/{interview.id}",
-        status_code=303,
+    # Show the interview created confirmation page
+    settings = get_settings()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_created.html",
+        context={
+            "user": user,
+            "project": project,
+            "interview": interview,
+            "base_url": settings.base_url,
+        },
     )
 
 
-@router.get("/interviews/{interview_id}")
-async def interview_detail(
+@router.get("/projects/{project_id}")
+async def project_detail(
     request: Request,
-    interview_id: UUID,
+    project_id: UUID,
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Interview detail page showing interview info and guest list."""
-    # Fetch interview with related data
+    """Project detail page showing project info and interview list."""
+    # Fetch project with related data
     result = await db.execute(
-        select(Interview)
-        .where(Interview.id == interview_id)
+        select(Project)
+        .where(Project.id == project_id)
         .options(
-            selectinload(Interview.template),
-            selectinload(Interview.guests).selectinload(Guest.transcript),
-            selectinload(Interview.guests).selectinload(Guest.analysis),
+            selectinload(Project.template),
+            selectinload(Project.interviews).selectinload(Interview.transcript),
+            selectinload(Project.interviews).selectinload(Interview.analysis),
         )
     )
-    interview = result.scalar_one_or_none()
+    project = result.scalar_one_or_none()
 
-    # Check if interview exists and belongs to user's team
-    if interview is None or interview.team_id != user.team_id:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    # Check if project exists and belongs to user's team
+    if project is None or project.team_id != user.team_id:
+        raise HTTPException(status_code=404, detail="Project not found")
 
+    settings = get_settings()
     return templates.TemplateResponse(
         request=request,
-        name="admin/interview_detail.html",
+        name="admin/project_detail.html",
         context={
             "user": user,
-            "interview": interview,
-            "guests": interview.guests,
+            "project": project,
+            "interviews": project.interviews,
+            "base_url": settings.base_url,
         },
     )
 
@@ -406,14 +499,14 @@ async def template_delete(
 
 
 # -----------------------------------------------------------------------------
-# Guest Invite Routes
+# Interview Invite Routes
 # -----------------------------------------------------------------------------
 
 
-def parse_guest_csv(
+def parse_interview_csv(
     file_content: str,
 ) -> tuple[list[dict[str, str]], list[str]]:
-    """Parse CSV content for guest import.
+    """Parse CSV content for interview import.
 
     Args:
         file_content: The CSV file content as a string.
@@ -453,63 +546,63 @@ def parse_guest_csv(
     return valid_rows, errors
 
 
-@router.get("/interviews/{interview_id}/invite")
+@router.get("/projects/{project_id}/invite")
 async def invite_form(
     request: Request,
-    interview_id: UUID,
+    project_id: UUID,
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Show the invite guest form for an interview."""
-    # Fetch interview
+    """Show the invite form for a project."""
+    # Fetch project
     result = await db.execute(
-        select(Interview)
-        .where(Interview.id == interview_id)
-        .where(Interview.team_id == user.team_id)
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
     )
-    interview = result.scalar_one_or_none()
+    project = result.scalar_one_or_none()
 
-    if interview is None:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
 
     return templates.TemplateResponse(
         request=request,
         name="admin/invite.html",
         context={
             "user": user,
-            "interview": interview,
+            "project": project,
         },
     )
 
 
-@router.post("/interviews/{interview_id}/invite")
+@router.post("/projects/{project_id}/invite")
 async def invite_submit(
     request: Request,
-    interview_id: UUID,
+    project_id: UUID,
     user: User = Depends(require_auth),
     email: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     csv_file: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_session),
 ):
-    """Invite guest(s) to an interview.
+    """Invite interviewee(s) to a project.
 
     Accepts either:
     - Single invite: email (required), name (optional)
     - CSV upload: file with email (required), name (optional) columns
     """
-    # Fetch interview
+    # Fetch project
     result = await db.execute(
-        select(Interview)
-        .where(Interview.id == interview_id)
-        .where(Interview.team_id == user.team_id)
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
     )
-    interview = result.scalar_one_or_none()
+    project = result.scalar_one_or_none()
 
-    if interview is None:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    guests_created = 0
+    new_interviews: list[Interview] = []
     errors = []
 
     # Check if CSV was uploaded
@@ -521,22 +614,22 @@ async def invite_submit(
         except UnicodeDecodeError:
             raise HTTPException(status_code=400, detail="CSV file must be UTF-8 encoded")
 
-        valid_rows, parse_errors = parse_guest_csv(csv_text)
+        valid_rows, parse_errors = parse_interview_csv(csv_text)
         errors.extend(parse_errors)
 
-        # Create guests from valid rows
+        # Create interviews from valid rows
         for row in valid_rows:
-            guest = Guest(
-                interview_id=interview_id,
+            interview = Interview(
+                project_id=project_id,
                 email=row["email"],
                 name=row["name"],
             )
-            db.add(guest)
-            guests_created += 1
+            db.add(interview)
+            new_interviews.append(interview)
 
         if errors:
             logger.warning(
-                f"CSV import for interview {interview_id} had {len(errors)} errors: {errors}"
+                f"CSV import for project {project_id} had {len(errors)} errors: {errors}"
             )
 
     elif email:
@@ -550,15 +643,15 @@ async def invite_submit(
             raise HTTPException(status_code=400, detail="Invalid email address")
 
         # Use email prefix as name if not provided
-        guest_name = name.strip() if name else email.split("@")[0]
+        interviewee_name = name.strip() if name else email.split("@")[0]
 
-        guest = Guest(
-            interview_id=interview_id,
+        interview = Interview(
+            project_id=project_id,
             email=email,
-            name=guest_name,
+            name=interviewee_name,
         )
-        db.add(guest)
-        guests_created += 1
+        db.add(interview)
+        new_interviews.append(interview)
 
     else:
         raise HTTPException(
@@ -567,8 +660,19 @@ async def invite_submit(
 
     await db.flush()
 
+    # Send invitation emails to newly created interviews
+    settings = get_settings()
+    for interview_obj in new_interviews:
+        magic_link = f"{settings.base_url}/i/{interview_obj.magic_token}"
+        await send_invitation_email(
+            to=interview_obj.email,
+            guest_name=interview_obj.name,
+            interview_topic=project.topic,
+            magic_link=magic_link,
+        )
+
     return RedirectResponse(
-        url=f"/admin/interviews/{interview_id}",
+        url=f"/admin/projects/{project_id}",
         status_code=303,
     )
 
@@ -581,14 +685,14 @@ async def invite_submit(
 def parse_bulk_csv(
     file_content: str,
 ) -> tuple[list[dict[str, str]], list[str]]:
-    """Parse CSV content for bulk interview/guest import.
+    """Parse CSV content for bulk project/interview import.
 
     Args:
         file_content: The CSV file content as a string.
 
     Returns:
         A tuple of (valid_rows, errors) where valid_rows is a list of dicts
-        with 'email', 'name', and optionally 'interview_topic' or 'interview_id' keys.
+        with 'email', 'name', and optionally 'project_topic' or 'project_id' keys.
     """
     valid_rows = []
     errors = []
@@ -599,14 +703,14 @@ def parse_bulk_csv(
     if reader.fieldnames is None or "email" not in reader.fieldnames:
         return [], ["CSV must have an 'email' column"]
 
-    has_topic = "interview_topic" in (reader.fieldnames or [])
-    has_id = "interview_id" in (reader.fieldnames or [])
+    has_topic = "project_topic" in (reader.fieldnames or [])
+    has_id = "project_id" in (reader.fieldnames or [])
 
     for row_num, row in enumerate(reader, start=2):
         email = row.get("email", "").strip()
         name = row.get("name", "").strip()
-        interview_topic = row.get("interview_topic", "").strip()
-        interview_id = row.get("interview_id", "").strip()
+        project_topic = row.get("project_topic", "").strip()
+        project_id = row.get("project_id", "").strip()
 
         if not email:
             errors.append(f"Row {row_num}: Missing email")
@@ -621,19 +725,19 @@ def parse_bulk_csv(
         if not name:
             name = email.split("@")[0]
 
-        # Validate interview_id if provided
-        if interview_id:
+        # Validate project_id if provided
+        if project_id:
             try:
-                UUID(interview_id)
+                UUID(project_id)
             except ValueError:
-                errors.append(f"Row {row_num}: Invalid interview_id '{interview_id}'")
+                errors.append(f"Row {row_num}: Invalid project_id '{project_id}'")
                 continue
 
         valid_rows.append({
             "email": email,
             "name": name,
-            "interview_topic": interview_topic,
-            "interview_id": interview_id,
+            "project_topic": project_topic,
+            "project_id": project_id,
         })
 
     return valid_rows, errors
@@ -672,13 +776,13 @@ async def bulk_import_submit(
     template_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
-    """Process bulk import of interviews and guests from CSV.
+    """Process bulk import of projects and interviews from CSV.
 
     CSV columns:
-    - email (required): Guest email address
-    - name (optional): Guest name (uses email prefix if not provided)
-    - interview_topic (optional): Creates a new interview with this topic
-    - interview_id (optional): Adds guest to existing interview
+    - email (required): Interviewee email address
+    - name (optional): Interviewee name (uses email prefix if not provided)
+    - project_topic (optional): Creates a new project with this topic
+    - project_id (optional): Adds interview to existing project
     """
     # Parse template_id if provided
     parsed_template_id: Optional[UUID] = None
@@ -714,67 +818,67 @@ async def bulk_import_submit(
             detail="No valid rows found in CSV. " + "; ".join(parse_errors[:5]),
         )
 
-    # Track created interviews by topic to avoid duplicates
-    topic_to_interview: dict[str, Interview] = {}
+    # Track created projects by topic to avoid duplicates
+    topic_to_project: dict[str, Project] = {}
+    projects_created = 0
     interviews_created = 0
-    guests_created = 0
 
     for row in valid_rows:
-        interview_id = None
+        project_id = None
 
-        # Determine which interview to add the guest to
-        if row["interview_id"]:
-            # Use existing interview
-            interview_id = UUID(row["interview_id"])
-            # Verify interview belongs to user's team
+        # Determine which project to add the interview to
+        if row["project_id"]:
+            # Use existing project
+            project_id = UUID(row["project_id"])
+            # Verify project belongs to user's team
             result = await db.execute(
-                select(Interview)
-                .where(Interview.id == interview_id)
-                .where(Interview.team_id == user.team_id)
+                select(Project)
+                .where(Project.id == project_id)
+                .where(Project.team_id == user.team_id)
             )
             if result.scalar_one_or_none() is None:
                 logger.warning(
-                    f"Skipping row: interview {interview_id} not found or not accessible"
+                    f"Skipping row: project {project_id} not found or not accessible"
                 )
                 continue
 
-        elif row["interview_topic"]:
-            # Create new interview or reuse one with same topic
-            topic = row["interview_topic"]
-            if topic in topic_to_interview:
-                interview_id = topic_to_interview[topic].id
+        elif row["project_topic"]:
+            # Create new project or reuse one with same topic
+            topic = row["project_topic"]
+            if topic in topic_to_project:
+                project_id = topic_to_project[topic].id
             else:
-                interview = Interview(
+                project = Project(
                     team_id=user.team_id,
                     template_id=parsed_template_id,
                     topic=topic,
                     target_minutes=30,
                     created_by=user.id,
                 )
-                db.add(interview)
+                db.add(project)
                 await db.flush()
-                topic_to_interview[topic] = interview
-                interview_id = interview.id
-                interviews_created += 1
+                topic_to_project[topic] = project
+                project_id = project.id
+                projects_created += 1
         else:
             logger.warning(
-                f"Skipping row: no interview_topic or interview_id provided for {row['email']}"
+                f"Skipping row: no project_topic or project_id provided for {row['email']}"
             )
             continue
 
-        # Create guest
-        guest = Guest(
-            interview_id=interview_id,
+        # Create interview
+        interview = Interview(
+            project_id=project_id,
             email=row["email"],
             name=row["name"],
         )
-        db.add(guest)
-        guests_created += 1
+        db.add(interview)
+        interviews_created += 1
 
     await db.flush()
 
     logger.info(
-        f"Bulk import complete: {interviews_created} interviews, {guests_created} guests created"
+        f"Bulk import complete: {projects_created} projects, {interviews_created} interviews created"
     )
 
     return RedirectResponse(url="/admin/", status_code=303)

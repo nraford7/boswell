@@ -25,10 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency specification
-COPY pyproject.toml ./
+# Copy package files needed for build
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 
-# Create a temporary setup for installing dependencies
 # Install all dependencies (base + server + voice)
 RUN pip install --upgrade pip && \
     pip wheel --no-deps --wheel-dir /app/wheels . && \

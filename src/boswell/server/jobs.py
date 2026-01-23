@@ -13,8 +13,8 @@ from sqlalchemy.orm import selectinload
 from boswell.server.database import get_session_context
 from boswell.server.models import (
     Analysis,
-    Guest,
     Interview,
+    Project,
     JobQueue,
     JobStatus,
     Transcript,
@@ -422,92 +422,92 @@ async def handle_send_email(payload: dict, db: AsyncSession) -> None:
 async def handle_generate_analysis(payload: dict, db: AsyncSession) -> None:
     """Generate AI analysis of an interview transcript.
 
-    Fetches the guest and their transcript from the database, generates
+    Fetches the interview and its transcript from the database, generates
     an analysis using Claude, then creates or updates the Analysis record.
 
     Expected payload:
-        - guest_id: UUID of the guest whose transcript to analyze
+        - guest_id: UUID of the interview whose transcript to analyze
 
     Raises:
-        ValueError: If guest_id is missing, guest not found, or no transcript.
+        ValueError: If guest_id is missing, interview not found, or no transcript.
     """
-    guest_id_str = payload.get("guest_id")
-    if not guest_id_str:
+    interview_id_str = payload.get("guest_id")  # Keep payload key for backward compatibility
+    if not interview_id_str:
         raise ValueError("Missing required field: guest_id")
 
     try:
-        guest_id = UUID(guest_id_str)
+        interview_id = UUID(interview_id_str)
     except (ValueError, TypeError) as e:
-        raise ValueError(f"Invalid guest_id format: {guest_id_str}") from e
+        raise ValueError(f"Invalid interview_id format: {interview_id_str}") from e
 
-    logger.info(f"Generating analysis for guest: {guest_id}")
+    logger.info(f"Generating analysis for interview: {interview_id}")
 
-    # Fetch guest with transcript and interview relationships
+    # Fetch interview with transcript and project relationships
     stmt = (
-        select(Guest)
+        select(Interview)
         .options(
-            selectinload(Guest.transcript),
-            selectinload(Guest.interview),
-            selectinload(Guest.analysis),
+            selectinload(Interview.transcript),
+            selectinload(Interview.project),
+            selectinload(Interview.analysis),
         )
-        .where(Guest.id == guest_id)
+        .where(Interview.id == interview_id)
     )
     result = await db.execute(stmt)
-    guest = result.scalar_one_or_none()
+    interview = result.scalar_one_or_none()
 
-    if not guest:
-        raise ValueError(f"Guest not found: {guest_id}")
+    if not interview:
+        raise ValueError(f"Interview not found: {interview_id}")
 
-    if not guest.transcript:
-        raise ValueError(f"No transcript found for guest: {guest_id}")
+    if not interview.transcript:
+        raise ValueError(f"No transcript found for interview: {interview_id}")
 
     # Extract transcript entries for analysis
-    transcript_entries = guest.transcript.entries or []
-    interview_topic = guest.interview.topic if guest.interview else "Unknown Topic"
+    transcript_entries = interview.transcript.entries or []
+    project_topic = interview.project.topic if interview.project else "Unknown Topic"
 
     logger.info(
-        f"Analyzing transcript for guest '{guest.name}' "
-        f"on topic '{interview_topic}', "
+        f"Analyzing transcript for '{interview.name}' "
+        f"on topic '{project_topic}', "
         f"entries={len(transcript_entries)}"
     )
 
     # TODO: Call Claude API to generate analysis
     # For now, generate stub analysis
     stub_analysis = _generate_stub_analysis(
-        guest_name=guest.name,
-        topic=interview_topic,
+        interviewee_name=interview.name,
+        topic=project_topic,
         transcript_entries=transcript_entries,
     )
 
     # Create or update Analysis record
-    if guest.analysis:
+    if interview.analysis:
         # Update existing analysis
-        guest.analysis.insights = stub_analysis["insights"]
-        guest.analysis.summary_md = stub_analysis["summary_md"]
-        logger.info(f"Updated existing analysis for guest: {guest_id}")
+        interview.analysis.insights = stub_analysis["insights"]
+        interview.analysis.summary_md = stub_analysis["summary_md"]
+        logger.info(f"Updated existing analysis for interview: {interview_id}")
     else:
         # Create new analysis
         analysis = Analysis(
-            guest_id=guest_id,
+            interview_id=interview_id,
             insights=stub_analysis["insights"],
             summary_md=stub_analysis["summary_md"],
         )
         db.add(analysis)
-        logger.info(f"Created new analysis for guest: {guest_id}")
+        logger.info(f"Created new analysis for interview: {interview_id}")
 
     await db.flush()
-    logger.info(f"Analysis generation complete for guest: {guest_id}")
+    logger.info(f"Analysis generation complete for interview: {interview_id}")
 
 
 def _generate_stub_analysis(
-    guest_name: str,
+    interviewee_name: str,
     topic: str,
     transcript_entries: list[dict],
 ) -> dict:
     """Generate stub analysis for testing.
 
     Args:
-        guest_name: Name of the interview guest.
+        interviewee_name: Name of the interviewee.
         topic: Topic of the interview.
         transcript_entries: List of transcript entry dictionaries.
 
@@ -518,7 +518,7 @@ def _generate_stub_analysis(
 
     insights = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "guest_name": guest_name,
+        "interviewee_name": interviewee_name,
         "topic": topic,
         "transcript_length": num_entries,
         "key_themes": [
@@ -542,11 +542,11 @@ def _generate_stub_analysis(
 
     summary_md = f"""# Interview Analysis: {topic}
 
-## Guest
-**{guest_name}**
+## Interviewee
+**{interviewee_name}**
 
 ## Overview
-This interview covered {topic} with {guest_name}. The conversation
+This interview covered {topic} with {interviewee_name}. The conversation
 included {num_entries} exchanges and touched on several key themes.
 
 ## Key Themes
@@ -558,7 +558,7 @@ included {num_entries} exchanges and touched on several key themes.
 - [Detailed insights will be generated with Claude integration]
 
 ## Summary
-The interview provided valuable perspectives on {topic}. The guest shared
+The interview provided valuable perspectives on {topic}. The interviewee shared
 their experiences and offered thoughtful commentary on current challenges
 and future opportunities.
 

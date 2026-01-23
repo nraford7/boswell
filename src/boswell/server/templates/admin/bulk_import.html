@@ -1,111 +1,181 @@
 {% extends "base.html" %}
 
-{% block title %}Bulk Import - Boswell{% endblock %}
+{% block title %}Bulk Upload - Boswell{% endblock %}
 
 {% block head %}
 <style>
-    .back-link {
-        display: inline-flex;
-        align-items: center;
-        color: var(--muted);
-        text-decoration: none;
-        font-size: 0.875rem;
-        margin-bottom: 1rem;
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
     }
 
-    .back-link:hover {
-        color: var(--primary);
-    }
-
-    .back-link svg {
-        margin-right: 0.25rem;
-    }
-
-    .file-input-wrapper {
-        position: relative;
-    }
-
-    .file-input-wrapper input[type="file"] {
-        padding: 0.75rem;
-    }
-
-    .help-text {
-        font-size: 0.875rem;
-        color: var(--muted);
-        margin-top: 0.5rem;
-    }
-
-    .csv-format {
-        background-color: var(--bg);
-        padding: 1rem;
-        border-radius: 4px;
-        font-family: monospace;
-        font-size: 0.875rem;
-        margin-top: 0.5rem;
-        overflow-x: auto;
+    .form-card {
+        max-width: 800px;
     }
 
     .instructions {
-        background-color: #e7f3ff;
-        border: 1px solid #b6d4fe;
-        border-radius: 4px;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
+        background-color: var(--accent-subtle);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-md);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
     }
 
     .instructions h4 {
-        margin-bottom: 0.5rem;
-        color: #084298;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--accent);
+        margin-bottom: 0.75rem;
     }
 
     .instructions ul {
         margin: 0;
         padding-left: 1.25rem;
-        color: #084298;
+        color: var(--fg-muted);
+        font-size: 0.875rem;
     }
 
     .instructions li {
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.375rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-group .required {
+        color: var(--accent);
+    }
+
+    .form-hint {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+        margin-top: 0.5rem;
+    }
+
+    .file-upload {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .file-upload:hover {
+        border-color: var(--accent);
+        background-color: var(--accent-subtle);
+    }
+
+    .file-upload input[type="file"] {
+        border: none;
+        padding: 0;
+        background: transparent;
+    }
+
+    .column-reference {
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        margin-top: 1rem;
+    }
+
+    .column-reference-header {
+        background-color: var(--bg-elevated);
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-dim);
+        border-bottom: 1px solid var(--border);
     }
 
     .column-table {
         width: 100%;
-        margin-top: 1rem;
-        font-size: 0.875rem;
+        margin: 0;
     }
 
     .column-table th,
     .column-table td {
-        padding: 0.5rem;
-        text-align: left;
+        padding: 0.75rem 1rem;
         border-bottom: 1px solid var(--border);
     }
 
     .column-table th {
+        background-color: transparent;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .column-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .badge-required {
+        display: inline-block;
+        background-color: var(--error-bg);
+        color: var(--error);
+        font-size: 0.625rem;
+        padding: 0.125rem 0.375rem;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-left: 0.375rem;
         font-weight: 600;
-        background-color: var(--bg);
     }
 
-    .required-badge {
+    .badge-optional {
         display: inline-block;
-        background-color: #dc3545;
-        color: white;
+        background-color: var(--bg-hover);
+        color: var(--fg-dim);
         font-size: 0.625rem;
         padding: 0.125rem 0.375rem;
-        border-radius: 2px;
+        border-radius: 999px;
         text-transform: uppercase;
-        margin-left: 0.25rem;
+        letter-spacing: 0.03em;
+        margin-left: 0.375rem;
+        font-weight: 600;
     }
 
-    .optional-badge {
-        display: inline-block;
-        background-color: var(--muted);
-        color: white;
-        font-size: 0.625rem;
-        padding: 0.125rem 0.375rem;
-        border-radius: 2px;
+    .csv-example {
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+
+    .csv-example-title {
+        font-size: 0.75rem;
+        font-weight: 600;
         text-transform: uppercase;
-        margin-left: 0.25rem;
+        letter-spacing: 0.05em;
+        color: var(--fg-dim);
+        margin-bottom: 0.75rem;
+    }
+
+    .csv-code {
+        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+        font-size: 0.8125rem;
+        color: var(--fg-muted);
+        line-height: 1.8;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
     }
 </style>
 {% endblock %}
@@ -113,107 +183,112 @@
 {% block body %}
 <nav class="nav">
     <div class="nav-content">
-        <a href="/admin/" class="nav-brand">Boswell</a>
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
         <div class="nav-links">
             <a href="/admin/">Dashboard</a>
-            <a href="/admin/templates">Templates</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
             <span class="text-muted">{{ user.name }}</span>
             <form method="post" action="/admin/logout" style="display: inline;">
-                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+                <button type="submit" class="btn-ghost">Logout</button>
             </form>
         </div>
     </div>
 </nav>
 
-<div class="container" style="padding-top: 2rem;">
-    <a href="/admin/" class="back-link">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
-        </svg>
-        Back to Dashboard
-    </a>
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Dashboard
+        </a>
+    </div>
 
-    <h1 style="margin-bottom: 1.5rem;">Bulk Import</h1>
+    <div class="card form-card">
+        <h1 style="font-family: var(--font-display); font-size: 2rem; font-weight: 400; margin-bottom: 2rem;">Bulk Upload</h1>
 
-    <div class="card" style="max-width: 800px;">
         <div class="instructions">
-            <h4>How Bulk Import Works</h4>
+            <h4>How Bulk Upload Works</h4>
             <ul>
-                <li>Upload a CSV file with guest emails and interview assignments</li>
-                <li>New interviews are automatically created for each unique topic</li>
-                <li>Guests can also be added to existing interviews using their ID</li>
+                <li>Upload a CSV file with interviewee emails and project assignments</li>
+                <li>New projects are automatically created for each unique topic</li>
+                <li>Interviews can also be added to existing projects using their ID</li>
                 <li>Invalid rows are skipped (check server logs for details)</li>
             </ul>
         </div>
 
         <form method="post" action="/admin/bulk" enctype="multipart/form-data">
-            <div class="mb-4">
-                <label for="csv_file" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">CSV File *</label>
-                <div class="file-input-wrapper">
+            <div class="form-group">
+                <label for="csv_file">CSV File <span class="required">*</span></label>
+                <div class="file-upload">
                     <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
                 </div>
-                <p class="help-text">Upload a CSV file with interview and guest information.</p>
+                <p class="form-hint">Upload a CSV file with project and interviewee information.</p>
             </div>
 
-            <div class="mb-4">
-                <label for="template_id" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Default Template</label>
+            <div class="form-group">
+                <label for="template_id">Default Interview Type</label>
                 <select id="template_id" name="template_id">
-                    <option value="">No template</option>
+                    <option value="">No interview type</option>
                     {% for template in templates %}
                     <option value="{{ template.id }}">{{ template.name }}</option>
                     {% endfor %}
                 </select>
-                <p class="help-text">Optional. Template to use for newly created interviews.</p>
+                <p class="form-hint">Optional. Interview type to use for newly created projects.</p>
             </div>
 
-            <div class="mb-4">
-                <p style="font-weight: 500; margin-bottom: 0.5rem;">CSV Column Reference:</p>
-                <table class="column-table">
-                    <thead>
-                        <tr>
-                            <th>Column</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>email</code> <span class="required-badge">required</span></td>
-                            <td>Guest's email address</td>
-                        </tr>
-                        <tr>
-                            <td><code>name</code> <span class="optional-badge">optional</span></td>
-                            <td>Guest's display name (uses email prefix if not provided)</td>
-                        </tr>
-                        <tr>
-                            <td><code>interview_topic</code> <span class="optional-badge">optional</span></td>
-                            <td>Creates a new interview with this topic (or reuses if already exists in this import)</td>
-                        </tr>
-                        <tr>
-                            <td><code>interview_id</code> <span class="optional-badge">optional</span></td>
-                            <td>UUID of an existing interview to add the guest to</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p class="help-text" style="margin-top: 1rem;">
-                    Each row must have either <code>interview_topic</code> or <code>interview_id</code> to assign the guest.
+            <div class="form-group">
+                <div class="column-reference">
+                    <div class="column-reference-header">CSV Column Reference</div>
+                    <table class="column-table">
+                        <thead>
+                            <tr>
+                                <th>Column</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>email</code><span class="badge-required">required</span></td>
+                                <td class="text-muted">Interviewee's email address</td>
+                            </tr>
+                            <tr>
+                                <td><code>name</code><span class="badge-optional">optional</span></td>
+                                <td class="text-muted">Interviewee's display name (uses email prefix if not provided)</td>
+                            </tr>
+                            <tr>
+                                <td><code>project_topic</code><span class="badge-optional">optional</span></td>
+                                <td class="text-muted">Creates a new project with this topic (or reuses if already exists in this import)</td>
+                            </tr>
+                            <tr>
+                                <td><code>project_id</code><span class="badge-optional">optional</span></td>
+                                <td class="text-muted">UUID of an existing project to add the interview to</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="form-hint" style="margin-top: 1rem;">
+                    Each row must have either <code>project_topic</code> or <code>project_id</code> to assign the interview.
                 </p>
             </div>
 
-            <div class="mb-4">
-                <p style="font-weight: 500; margin-bottom: 0.5rem;">Example CSV:</p>
-                <div class="csv-format">
-                    email,name,interview_topic<br>
+            <div class="csv-example">
+                <div class="csv-example-title">Example CSV</div>
+                <div class="csv-code">
+                    email,name,project_topic<br>
                     alice@example.com,Alice Smith,Customer Feedback Research<br>
                     bob@example.com,Bob Johnson,Customer Feedback Research<br>
                     carol@example.com,Carol Williams,Product Usability Study<br>
                     dave@example.com,,Product Usability Study
                 </div>
-                <p class="help-text">
-                    This example creates 2 interviews: "Customer Feedback Research" (with Alice and Bob) and "Product Usability Study" (with Carol and Dave).
+                <p class="form-hint" style="margin-top: 0.75rem;">
+                    This example creates 2 projects: "Customer Feedback Research" (with Alice and Bob) and "Product Usability Study" (with Carol and Dave).
                 </p>
             </div>
 
-            <button type="submit" class="btn" style="width: 100%;">Import from CSV</button>
+            <button type="submit" class="btn submit-btn" style="margin-top: 2rem;">Import from CSV</button>
         </form>
     </div>
 </div>

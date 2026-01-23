@@ -16,8 +16,7 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup
-    await init_db()
+    # Startup - database is initialized by alembic migrations in start_web.sh
     yield
     # Shutdown
     await close_db()

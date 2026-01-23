@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Project Created - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .success-card {
+        max-width: 600px;
+    }
+
+    .success-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .success-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.5rem;
+        background: var(--success-bg);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--success);
+    }
+
+    .success-title {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 400;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .success-subtitle {
+        color: var(--fg-muted);
+        font-size: 1rem;
+    }
+
+    .detail-section {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .detail-section h3 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-dim);
+        margin-bottom: 1rem;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .detail-row:first-of-type {
+        padding-top: 0;
+    }
+
+    .detail-label {
+        font-size: 0.875rem;
+        color: var(--fg-dim);
+    }
+
+    .detail-value {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--fg);
+        text-align: right;
+        max-width: 60%;
+    }
+
+    .invite-link-section {
+        background: var(--accent-subtle);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .invite-link-section h3 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--accent);
+        margin-bottom: 0.5rem;
+    }
+
+    .invite-link-section p {
+        font-size: 0.8125rem;
+        color: var(--fg-muted);
+        margin-bottom: 1rem;
+    }
+
+    .link-box {
+        display: flex;
+        gap: 0.5rem;
+        align-items: stretch;
+    }
+
+    .link-input {
+        flex: 1;
+        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+        font-size: 0.8125rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--fg);
+    }
+
+    .link-input:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+
+    .copy-btn {
+        padding: 0.75rem 1.25rem;
+        background: var(--accent);
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-weight: 500;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .copy-btn:hover {
+        background: var(--accent-hover);
+    }
+
+    .copy-btn.copied {
+        background: var(--success);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .action-buttons .btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .btn-secondary {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        color: var(--fg-muted);
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-hover);
+        border-color: var(--accent);
+        color: var(--accent);
+        box-shadow: none;
+        transform: none;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.75rem;
+        background: var(--accent-subtle);
+        border: 1px solid var(--border-accent);
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--accent);
+    }
+
+    .status-badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        background: var(--accent);
+        border-radius: 50%;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Dashboard</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Dashboard
+        </a>
+    </div>
+
+    <div class="card success-card">
+        <div class="success-header">
+            <div class="success-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/>
+                </svg>
+            </div>
+            <h1 class="success-title">Project Created</h1>
+            <p class="success-subtitle">The project is ready. Share the link below with your interviewee.</p>
+        </div>
+
+        <div class="detail-section">
+            <h3>Project Details</h3>
+            <div class="detail-row">
+                <span class="detail-label">Interviewee</span>
+                <span class="detail-value">{{ interview.name }} ({{ interview.email }})</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Topic</span>
+                <span class="detail-value">{{ project.topic[:80] }}{% if project.topic|length > 80 %}...{% endif %}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Duration</span>
+                <span class="detail-value">{{ project.target_minutes }} minutes</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Status</span>
+                <span class="detail-value"><span class="status-badge">Ready to Send</span></span>
+            </div>
+        </div>
+
+        <div class="invite-link-section">
+            <h3>Invitation Link</h3>
+            <p>Copy this link and send it to {{ interview.name }} to start the interview.</p>
+            <div class="link-box">
+                <input type="text" class="link-input" id="inviteLink" value="{{ base_url }}/i/{{ interview.magic_token }}" readonly>
+                <button type="button" class="copy-btn" onclick="copyLink()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                    </svg>
+                    Copy
+                </button>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <a href="/admin/" class="btn btn-secondary">Back to Dashboard</a>
+            <a href="/admin/projects/{{ project.id }}" class="btn">View Project</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyLink() {
+    const input = document.getElementById('inviteLink');
+    const btn = document.querySelector('.copy-btn');
+
+    navigator.clipboard.writeText(input.value).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg> Copied!';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg> Copy';
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

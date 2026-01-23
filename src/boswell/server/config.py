@@ -33,6 +33,7 @@ class Settings:
     deepgram_api_key: str
     elevenlabs_api_key: str
     resend_api_key: str
+    sender_email: str
 
     # App config
     secret_key: str
@@ -82,6 +83,7 @@ class Settings:
             deepgram_api_key=_require_env("DEEPGRAM_API_KEY"),
             elevenlabs_api_key=_require_env("ELEVENLABS_API_KEY"),
             resend_api_key=_require_env("RESEND_API_KEY"),
+            sender_email=os.environ.get("SENDER_EMAIL", "Boswell <boswell@emirintelligence.com>"),
             secret_key=secret_key,
             base_url=os.environ.get("BASE_URL", "http://localhost:8000"),
             admin_emails=admin_emails,

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}New Project - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-card {
+        max-width: 680px;
+    }
+
+    .form-section {
+        margin-bottom: 2rem;
+    }
+
+    .form-section-title {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-section-desc {
+        color: var(--fg-dim);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-group .required {
+        color: var(--accent);
+    }
+
+    .form-hint {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+        margin-top: 0.5rem;
+    }
+
+    .form-divider {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 2rem 0;
+    }
+
+    input[type="number"] {
+        max-width: 140px;
+    }
+
+    .file-upload {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .file-upload:hover {
+        border-color: var(--accent);
+        background-color: var(--accent-subtle);
+    }
+
+    .file-upload input[type="file"] {
+        border: none;
+        padding: 0;
+        background: transparent;
+        text-align: center;
+    }
+
+    .file-upload-label {
+        display: block;
+        color: var(--fg-muted);
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Dashboard</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Dashboard
+        </a>
+    </div>
+
+    <div class="card form-card">
+        <h1 style="font-family: var(--font-display); font-size: 2rem; font-weight: 400; margin-bottom: 2rem;">New Project</h1>
+
+        <form method="post" action="/admin/projects/new" enctype="multipart/form-data">
+            <div class="form-section">
+                <h3 class="form-section-title">Interviewee Information</h3>
+                <p class="form-section-desc">Who will be interviewed?</p>
+
+                <div class="form-group">
+                    <label for="guest_name">Name <span class="required">*</span></label>
+                    <input type="text" id="guest_name" name="guest_name" required placeholder="John Smith">
+                </div>
+
+                <div class="form-group">
+                    <label for="guest_email">Email <span class="required">*</span></label>
+                    <input type="email" id="guest_email" name="guest_email" required placeholder="john@example.com">
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <div class="form-section">
+                <h3 class="form-section-title">Project Details</h3>
+                <p class="form-section-desc">What is this project about?</p>
+
+                <div class="form-group">
+                    <label for="topic">Topic <span class="required">*</span></label>
+                    <textarea id="topic" name="topic" required rows="3" placeholder="Describe the purpose and intent of this interview. What do you want to learn? What areas should be explored?"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="template_id">Interview Type</label>
+                    <select id="template_id" name="template_id">
+                        <option value="">No interview type</option>
+                        {% for template in templates %}
+                        <option value="{{ template.id }}">{{ template.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-hint">Optional: Select an interview type to pre-configure settings.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="target_minutes">Target Duration (minutes)</label>
+                    <input type="number" id="target_minutes" name="target_minutes" value="30" min="5" max="120" required>
+                    <p class="form-hint">The target length for the interview (5-120 minutes).</p>
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <div class="form-section">
+                <h3 class="form-section-title">Research Materials</h3>
+                <p class="form-section-desc">Optional: Give Boswell background information about the topic or guest.</p>
+
+                <div class="form-group">
+                    <label for="research_files">Upload Documents</label>
+                    <div class="file-upload">
+                        <span class="file-upload-label">PDFs, text files, markdown</span>
+                        <input type="file" id="research_files" name="research_files" multiple accept=".pdf,.txt,.md,.doc,.docx">
+                    </div>
+                    <p class="form-hint">Briefings, bios, research notes.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="research_urls">Web Links</label>
+                    <textarea id="research_urls" name="research_urls" rows="3" placeholder="https://example.com/bio&#10;https://example.com/topic-background&#10;(one URL per line)"></textarea>
+                    <p class="form-hint">URLs to scrape for research. Websites, articles, relevant pages.</p>
+                </div>
+            </div>
+
+            <button type="submit" class="btn submit-btn">Create Project</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

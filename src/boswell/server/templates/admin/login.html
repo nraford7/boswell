@@ -2,22 +2,178 @@
 
 {% block title %}Login - Boswell{% endblock %}
 
+{% block head %}
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 2rem;
+        position: relative;
+    }
+
+    .login-container::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 600px;
+        height: 600px;
+        background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    .login-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 3rem;
+        width: 100%;
+        max-width: 420px;
+        position: relative;
+        animation: fadeIn 0.5s ease forwards;
+    }
+
+    .login-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    .login-brand {
+        font-family: var(--font-display);
+        font-size: 3rem;
+        font-weight: 400;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, var(--fg) 0%, var(--fg-muted) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.03em;
+    }
+
+    .login-tagline {
+        text-align: center;
+        color: var(--fg-dim);
+        font-size: 0.9375rem;
+        margin-bottom: 2.5rem;
+        font-weight: 300;
+        letter-spacing: 0.02em;
+    }
+
+    .login-form .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .login-form input[type="email"] {
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+        text-align: center;
+    }
+
+    .login-form input[type="email"]::placeholder {
+        color: var(--fg-dim);
+        text-align: center;
+    }
+
+    .login-form .btn {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+    }
+
+    .login-message {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        animation: fadeIn 0.3s ease forwards;
+    }
+
+    .login-message.success {
+        background-color: var(--accent-subtle);
+        color: var(--accent);
+        border: 1px solid var(--border-accent);
+    }
+
+    .login-message.error {
+        background-color: var(--error-bg);
+        color: var(--error);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .login-footer {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+    }
+
+    /* Decorative elements */
+    .login-decoration {
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        opacity: 0.3;
+        pointer-events: none;
+    }
+
+    .login-decoration-1 {
+        top: -100px;
+        right: -100px;
+    }
+
+    .login-decoration-2 {
+        bottom: -80px;
+        left: -80px;
+        width: 160px;
+        height: 160px;
+    }
+</style>
+{% endblock %}
+
 {% block body %}
-<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
-    <div class="card" style="max-width: 400px; width: 100%;">
-        <h1 class="text-center mb-4">Boswell</h1>
-        <p class="text-muted text-center mb-4">Enter your email to receive a login link.</p>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-decoration login-decoration-1"></div>
+        <div class="login-decoration login-decoration-2"></div>
+
+        <h1 class="login-brand">Boswell</h1>
+        <p class="login-tagline">Intelligence through conversation</p>
+
         {% if message %}
-        <div class="mb-4" style="padding: 0.75rem; background-color: #d1e7dd; border-radius: 4px; color: #0f5132;">
+        <div class="login-message {% if 'not authorized' in message.lower() or 'failed' in message.lower() or 'invalid' in message.lower() %}error{% else %}success{% endif %}">
             {{ message }}
         </div>
         {% endif %}
-        <form method="post" action="/admin/login">
-            <div class="mb-4">
-                <input type="email" name="email" placeholder="Email address" required>
+
+        <form method="post" action="/admin/login" class="login-form">
+            <div class="form-group">
+                <input type="email" name="email" placeholder="Enter your email" required autocomplete="email" autofocus>
             </div>
-            <button type="submit" class="btn" style="width: 100%;">Send Login Link</button>
+            <button type="submit" class="btn">Send Login Link</button>
         </form>
+
+        <div class="login-footer">
+            Secure, passwordless authentication
+        </div>
     </div>
 </div>
 {% endblock %}

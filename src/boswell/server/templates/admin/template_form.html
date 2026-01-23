@@ -1,55 +1,106 @@
 {% extends "base.html" %}
 
-{% block title %}{% if mode == 'edit' %}Edit Template{% else %}New Template{% endif %} - Boswell{% endblock %}
+{% block title %}{% if mode == 'edit' %}Edit Interview Type{% else %}New Interview Type{% endif %} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-card {
+        max-width: 600px;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-group .required {
+        color: var(--accent);
+    }
+
+    .form-hint {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+        margin-top: 0.5rem;
+    }
+
+    input[type="number"] {
+        max-width: 140px;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+    }
+</style>
+{% endblock %}
 
 {% block body %}
 <nav class="nav">
     <div class="nav-content">
-        <a href="/admin/" class="nav-brand">Boswell</a>
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
         <div class="nav-links">
             <a href="/admin/">Dashboard</a>
-            <a href="/admin/templates">Templates</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/bulk">Bulk Upload</a>
             <span class="text-muted">{{ user.name }}</span>
             <form method="post" action="/admin/logout" style="display: inline;">
-                <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; padding: 0; margin-left: 1rem;">Logout</button>
+                <button type="submit" class="btn-ghost">Logout</button>
             </form>
         </div>
     </div>
 </nav>
 
-<div class="container" style="padding-top: 2rem;">
-    <div class="mb-4">
-        <a href="/admin/templates" style="color: var(--primary); text-decoration: none;">&larr; Back to Templates</a>
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/templates" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Interview Types
+        </a>
     </div>
 
-    <div class="card" style="max-width: 600px;">
-        <h1 class="mb-4">{% if mode == 'edit' %}Edit Template{% else %}New Template{% endif %}</h1>
+    <div class="card form-card">
+        <h1 style="font-family: var(--font-display); font-size: 2rem; font-weight: 400; margin-bottom: 2rem;">{% if mode == 'edit' %}Edit Interview Type{% else %}New Interview Type{% endif %}</h1>
 
         <form method="post" action="{% if mode == 'edit' %}/admin/templates/{{ template.id }}/edit{% else %}/admin/templates/new{% endif %}">
-            <div class="mb-4">
-                <label for="name" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Name *</label>
-                <input type="text" id="name" name="name" required placeholder="Template name" value="{% if template %}{{ template.name }}{% endif %}">
+            <div class="form-group">
+                <label for="name">Name <span class="required">*</span></label>
+                <input type="text" id="name" name="name" required placeholder="Interview type name" value="{% if template %}{{ template.name }}{% endif %}">
             </div>
 
-            <div class="mb-4">
-                <label for="description" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Description</label>
+            <div class="form-group">
+                <label for="description">Description</label>
                 <textarea id="description" name="description" placeholder="Brief description of what this template is for">{% if template and template.description %}{{ template.description }}{% endif %}</textarea>
-                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">Optional: Describe the purpose of this interview template.</p>
+                <p class="form-hint">Optional: Describe the purpose of this interview type.</p>
             </div>
 
-            <div class="mb-4">
-                <label for="prompt_modifier" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Prompt Modifier</label>
+            <div class="form-group">
+                <label for="prompt_modifier">Prompt Modifier</label>
                 <textarea id="prompt_modifier" name="prompt_modifier" placeholder="Additional instructions for the AI interviewer" style="min-height: 150px;">{% if template and template.prompt_modifier %}{{ template.prompt_modifier }}{% endif %}</textarea>
-                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">Optional: Custom instructions to modify how the AI conducts interviews using this template.</p>
+                <p class="form-hint">Optional: Custom instructions to modify how the AI conducts interviews using this type.</p>
             </div>
 
-            <div class="mb-4">
-                <label for="default_minutes" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Default Duration (minutes)</label>
+            <div class="form-group">
+                <label for="default_minutes">Default Duration (minutes)</label>
                 <input type="number" id="default_minutes" name="default_minutes" value="{% if template %}{{ template.default_minutes }}{% else %}30{% endif %}" min="5" max="120" required>
-                <p class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">The default target length for interviews using this template (5-120 minutes).</p>
+                <p class="form-hint">The default target length for interviews using this type (5-120 minutes).</p>
             </div>
 
-            <button type="submit" class="btn" style="width: 100%;">{% if mode == 'edit' %}Update Template{% else %}Create Template{% endif %}</button>
+            <button type="submit" class="btn submit-btn">{% if mode == 'edit' %}Update Interview Type{% else %}Create Interview Type{% endif %}</button>
         </form>
     </div>
 </div>

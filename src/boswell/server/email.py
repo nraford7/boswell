@@ -1,12 +1,15 @@
 """Email sending module using Resend API.
 
-This module provides a unified interface for sending emails. Currently
-implements a stub that logs email attempts. Will be replaced with actual
-Resend integration later.
+This module provides a unified interface for sending emails using the
+Resend API for transactional email delivery.
 """
 
 import logging
 from typing import Any
+
+import resend
+
+from boswell.server.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +19,19 @@ async def send_email(
     subject: str,
     body: str,
     *,
+    html: str | None = None,
     template: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> bool:
-    """Send an email via Resend (stub for now).
+    """Send an email via Resend.
 
     Args:
         to: Recipient email address.
         subject: Email subject line.
-        body: Plain text or HTML email body.
-        template: Optional template name (for future use).
-        context: Optional template context variables (for future use).
+        body: Plain text email body.
+        html: Optional HTML email body.
+        template: Optional template name (for logging/tracking).
+        context: Optional template context variables (for logging/tracking).
 
     Returns:
         True if email was sent successfully, False otherwise.
@@ -39,21 +44,41 @@ async def send_email(
         ... )
         True
     """
-    # TODO: Implement with Resend API
-    # from boswell.server.config import get_settings
-    # settings = get_settings()
-    # resend.api_key = settings.resend_api_key
-    # resend.Emails.send(...)
+    settings = get_settings()
 
-    logger.info(
-        f"[EMAIL STUB] To: {to}, Subject: {subject}, "
-        f"Template: {template}, Body length: {len(body)} chars"
-    )
+    if not settings.resend_api_key:
+        logger.error("RESEND_API_KEY not configured")
+        return False
 
-    if context:
-        logger.debug(f"[EMAIL STUB] Context keys: {list(context.keys())}")
+    resend.api_key = settings.resend_api_key
 
-    return True
+    try:
+        params: resend.Emails.SendParams = {
+            "from": settings.sender_email,
+            "to": [to],
+            "subject": subject,
+            "text": body,
+        }
+
+        if html:
+            params["html"] = html
+
+        logger.info(f"Sending email to {to} from {settings.sender_email}")
+        response = resend.Emails.send(params)
+
+        email_id = response.get('id') if isinstance(response, dict) else getattr(response, 'id', 'unknown')
+        logger.info(
+            f"Email sent successfully to {to}, subject: {subject}, "
+            f"template: {template}, id: {email_id}"
+        )
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"Failed to send email to {to}, subject: {subject}, "
+            f"template: {template}, error: {type(e).__name__}: {e}"
+        )
+        return False
 
 
 async def send_invitation_email(
@@ -86,16 +111,98 @@ This link is unique to you and should not be shared.
 Best regards,
 The Boswell Team
 """
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">You're Invited</h1>
+    </div>
+    <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+        <p style="margin-top: 0;">Hello {guest_name},</p>
+        <p>You have been invited to participate in an interview about:</p>
+        <p style="font-size: 18px; font-weight: 600; color: #4f46e5; margin: 20px 0;">{interview_topic}</p>
+        <p style="margin-bottom: 25px;">Click the button below to start your interview when you're ready:</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{magic_link}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Start Interview</a>
+        </div>
+        <p style="font-size: 14px; color: #6b7280; margin-top: 25px;">This link is unique to you and should not be shared.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;">
+        <p style="font-size: 14px; color: #6b7280; margin-bottom: 0;">Best regards,<br>The Boswell Team</p>
+    </div>
+</body>
+</html>"""
     return await send_email(
         to=to,
         subject=subject,
         body=body,
+        html=html,
         template="invitation",
         context={
             "guest_name": guest_name,
             "interview_topic": interview_topic,
             "magic_link": magic_link,
         },
+    )
+
+
+async def send_admin_login_email(
+    to: str,
+    login_link: str,
+) -> bool:
+    """Send admin magic link login email.
+
+    Args:
+        to: Admin email address.
+        login_link: Magic link URL for login.
+
+    Returns:
+        True if email was sent successfully, False otherwise.
+    """
+    subject = "Your Boswell Login Link"
+    body = f"""Hello,
+
+Click the link below to log in to Boswell:
+{login_link}
+
+This link will expire in 1 hour.
+
+Best regards,
+The Boswell Team
+"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Login to Boswell</h1>
+    </div>
+    <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+        <p style="margin-top: 0;">Hello,</p>
+        <p>Click the button below to log in to your Boswell admin dashboard:</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{login_link}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Log In</a>
+        </div>
+        <p style="font-size: 14px; color: #6b7280; margin-top: 25px;">This link will expire in 1 hour.</p>
+        <p style="font-size: 14px; color: #6b7280;">If you didn't request this login link, you can safely ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;">
+        <p style="font-size: 14px; color: #6b7280; margin-bottom: 0;">Best regards,<br>The Boswell Team</p>
+    </div>
+</body>
+</html>"""
+    return await send_email(
+        to=to,
+        subject=subject,
+        body=body,
+        html=html,
+        template="admin_login",
+        context={"login_link": login_link},
     )
 
 
