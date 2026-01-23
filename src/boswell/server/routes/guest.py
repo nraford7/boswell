@@ -318,3 +318,41 @@ async def guest_rejoin(
             "guest": guest,
         },
     )
+
+
+@router.get("/i/{magic_token}/thankyou", response_class=HTMLResponse)
+async def guest_thankyou(
+    request: Request,
+    magic_token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Show thank you page after interview completion.
+
+    Accessible to any guest that exists (no status requirement).
+    """
+    # Fetch guest with interview and analysis relationships
+    result = await db.execute(
+        select(Guest)
+        .options(selectinload(Guest.interview), selectinload(Guest.analysis))
+        .where(Guest.magic_token == magic_token)
+    )
+    guest = result.scalar_one_or_none()
+
+    # Not found
+    if not guest:
+        return templates.TemplateResponse(
+            request=request,
+            name="guest/landing.html",
+            context={"error": "Interview not found."},
+            status_code=404,
+        )
+
+    # Show thank you page
+    return templates.TemplateResponse(
+        request=request,
+        name="guest/thankyou.html",
+        context={
+            "interview": guest.interview,
+            "guest": guest,
+        },
+    )

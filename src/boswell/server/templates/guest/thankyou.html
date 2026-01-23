@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Thank You - Boswell{% endblock %}
+
+{% block body %}
+<div class="container" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+    <div class="card" style="max-width: 600px; width: 100%;">
+        <h1 class="mb-4">Thank You</h1>
+        <p style="font-size: 1.25rem; margin-bottom: 1.5rem;">Your interview on <strong>{{ interview.topic }}</strong> has been recorded.</p>
+
+        <div class="mb-4">
+            <h3 class="mb-2">What happens next?</h3>
+            <ul style="padding-left: 1.5rem; color: var(--muted);">
+                <li class="mb-2"><strong>Transcript:</strong> A full transcript of your conversation will be emailed to you shortly.</li>
+                <li class="mb-2"><strong>Privacy:</strong> Your responses are anonymous by default. Your identity will not be shared without your explicit consent.</li>
+            </ul>
+        </div>
+
+        {% if guest.analysis %}
+        <div class="mb-4" style="background-color: var(--bg); padding: 1.5rem; border-radius: 8px;">
+            <h3 class="mb-2">Insights Preview</h3>
+            {% if guest.analysis.summary_md %}
+            <p class="text-muted" style="white-space: pre-wrap;">{{ guest.analysis.summary_md[:500] }}{% if guest.analysis.summary_md|length > 500 %}...{% endif %}</p>
+            {% elif guest.analysis.insights %}
+            <p class="text-muted">Analysis is available. A detailed summary will be included in your email.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <p class="text-muted text-center" style="margin-top: 2rem;">You may now close this window.</p>
+    </div>
+</div>
+{% endblock %}
