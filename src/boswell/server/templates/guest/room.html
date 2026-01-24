@@ -106,6 +106,8 @@
         <div class="loading-logo">Boswell</div>
         <div class="loading-spinner"></div>
         <p class="loading-text">Connecting to interview room...</p>
+        <!-- Debug info (remove in production) -->
+        <p id="debug-info" style="font-size: 0.75rem; color: #666; margin-top: 2rem; word-break: break-all; max-width: 80%; text-align: center;"></p>
     </div>
 
     <div id="daily-container"></div>
@@ -133,6 +135,13 @@
 
     console.log('Daily.co room URL:', roomUrl);
     console.log('Daily.co token present:', !!roomToken);
+    console.log('Daily.co token (first 20 chars):', roomToken.substring(0, 20));
+
+    // Show debug info on page
+    const debugEl = document.getElementById('debug-info');
+    if (debugEl) {
+        debugEl.textContent = 'Room: ' + roomUrl + ' | Token: ' + (roomToken ? 'present (' + roomToken.length + ' chars)' : 'MISSING');
+    }
 
     // Check if Daily SDK loaded
     if (!window.DailyIframe) {
