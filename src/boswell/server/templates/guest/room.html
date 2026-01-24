@@ -3,6 +3,8 @@
 {% block title %}Interview Room - Boswell{% endblock %}
 
 {% block head %}
+<!-- Daily.co SDK for theming support -->
+<script src="https://unpkg.com/@daily-co/daily-js"></script>
 <style>
     html, body {
         margin: 0;
@@ -26,12 +28,16 @@
         flex-direction: column;
     }
 
-    #daily-iframe {
+    #daily-container {
         flex: 1;
+        width: 100%;
+        background-color: #0a0a0c;
+    }
+
+    #daily-container iframe {
         width: 100%;
         height: 100%;
         border: none;
-        background-color: #0a0a0c;
     }
 
     .loading-state {
@@ -91,6 +97,37 @@
         opacity: 0.5;
         pointer-events: none;
     }
+
+    .error-actions {
+        margin-top: 1.5rem;
+        display: flex;
+        gap: 1rem;
+    }
+
+    .error-actions button {
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        border: 1px solid #333;
+        background: #18181c;
+        color: #f5f5f0;
+        transition: background 0.2s;
+    }
+
+    .error-actions button:hover {
+        background: #222;
+    }
+
+    .error-actions button.primary {
+        background: #d4a855;
+        color: #0a0a0c;
+        border-color: #d4a855;
+    }
+
+    .error-actions button.primary:hover {
+        background: #c49a4d;
+    }
 </style>
 {% endblock %}
 
@@ -101,29 +138,119 @@
         <div class="loading-logo">Boswell</div>
         <div class="loading-spinner"></div>
         <p class="loading-text">Connecting to interview room...</p>
+        <div id="error-actions" class="error-actions" style="display: none;">
+            <button onclick="location.reload()" class="primary">Try Again</button>
+            <button onclick="useFallback()">Use Basic Mode</button>
+        </div>
     </div>
 
-    <iframe
-        id="daily-iframe"
-        src="{{ room_url }}?t={{ room_token }}"
-        allow="microphone; camera; autoplay; display-capture"
-    ></iframe>
+    <div id="daily-container"></div>
 </div>
 
 <script>
-    const iframe = document.getElementById('daily-iframe');
+    // Room credentials from server
+    const ROOM_URL = '{{ room_url }}';
+    const ROOM_TOKEN = '{{ room_token }}';
+    const THANK_YOU_URL = '/i/{{ interview.magic_token }}/thankyou';
 
-    // Hide loading when iframe loads
-    iframe.addEventListener('load', function() {
-        document.getElementById('loading').classList.add('hidden');
-    });
-
-    // Listen for messages from Daily iframe (for leave detection)
-    window.addEventListener('message', function(event) {
-        // Daily sends messages when participant leaves
-        if (event.data && event.data.action === 'left-meeting') {
-            window.location.href = '/i/{{ interview.magic_token }}/thankyou';
+    // Boswell black & gold theme - ONLY used in createFrame()
+    const BOSWELL_THEME = {
+        colors: {
+            accent: '#d4a855',
+            accentText: '#0a0a0c',
+            background: '#0a0a0c',
+            backgroundAccent: '#18181c',
+            baseText: '#f5f5f0',
+            border: '#333338',
+            mainAreaBg: '#0a0a0c',
+            mainAreaBgAccent: '#111114',
+            mainAreaText: '#f5f5f0',
+            supportiveText: '#888888'
         }
-    });
+    };
+
+    // UI helpers
+    function showError(message) {
+        document.querySelector('.loading-spinner').style.display = 'none';
+        document.querySelector('.loading-text').textContent = message;
+        document.getElementById('error-actions').style.display = 'flex';
+    }
+
+    function hideLoading() {
+        document.getElementById('loading').classList.add('hidden');
+    }
+
+    // Fallback: use simple iframe without theming
+    function useFallback() {
+        console.log('[Boswell] Using fallback iframe mode');
+        const container = document.getElementById('daily-container');
+        container.innerHTML = '<iframe id="fallback-iframe" allow="microphone; camera; autoplay; display-capture" style="width:100%;height:100%;border:none;"></iframe>';
+        document.getElementById('fallback-iframe').src = ROOM_URL + '?t=' + ROOM_TOKEN;
+        hideLoading();
+    }
+
+    // Main initialization
+    (function init() {
+        console.log('[Boswell] Initializing room...');
+        console.log('[Boswell] Room URL:', ROOM_URL);
+        console.log('[Boswell] Token present:', !!ROOM_TOKEN);
+
+        // Check if SDK loaded
+        if (typeof DailyIframe === 'undefined') {
+            console.error('[Boswell] Daily SDK failed to load');
+            showError('Video system failed to load.');
+            return;
+        }
+        console.log('[Boswell] Daily SDK loaded');
+
+        // Create frame with theme (theme ONLY here, not in join)
+        const callFrame = DailyIframe.createFrame(
+            document.getElementById('daily-container'),
+            {
+                iframeStyle: {
+                    width: '100%',
+                    height: '100%',
+                    border: 'none'
+                },
+                showLeaveButton: true,
+                showFullscreenButton: true,
+                theme: BOSWELL_THEME  // Theme ONLY in createFrame
+            }
+        );
+        console.log('[Boswell] Frame created');
+
+        // Set up timeout (15 seconds)
+        const joinTimeout = setTimeout(function() {
+            console.error('[Boswell] Join timed out after 15 seconds');
+            showError('Connection timed out.');
+        }, 15000);
+
+        // Join room - ONLY url and token, NO theme
+        console.log('[Boswell] Joining room...');
+        callFrame.join({
+            url: ROOM_URL,
+            token: ROOM_TOKEN
+            // NO theme here - it's already set in createFrame
+        }).then(function() {
+            clearTimeout(joinTimeout);
+            console.log('[Boswell] Successfully joined room');
+            hideLoading();
+        }).catch(function(error) {
+            clearTimeout(joinTimeout);
+            console.error('[Boswell] Failed to join:', error);
+            showError('Failed to connect: ' + (error.message || 'Unknown error'));
+        });
+
+        // Handle leaving
+        callFrame.on('left-meeting', function() {
+            console.log('[Boswell] Left meeting, redirecting...');
+            window.location.href = THANK_YOU_URL;
+        });
+
+        // Log errors
+        callFrame.on('error', function(event) {
+            console.error('[Boswell] Daily error:', event);
+        });
+    })();
 </script>
 {% endblock %}
