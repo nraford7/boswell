@@ -3,7 +3,8 @@
 from typing import Any, Callable
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import EndFrame, LLMMessagesFrame
+from pipecat.frames.frames import EndFrame
+from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -188,22 +189,19 @@ async def create_pipeline(
             greeting_sent = False  # Reset so we greet the actual guest
             return
 
+        # Add greeting message to context and trigger LLM
+        # Using OpenAILLMContextFrame with our actual_context preserves the system prompt
         if is_resumed:
-            # Resuming a paused interview
-            await task.queue_frames(
-                [LLMMessagesFrame([{
-                    "role": "user",
-                    "content": "Guest rejoined. Welcome back briefly, then continue."
-                }])]
-            )
+            actual_context.add_message({
+                "role": "user",
+                "content": "Guest rejoined. Welcome back briefly, then continue."
+            })
         else:
-            # New interview - introduce and begin
-            await task.queue_frames(
-                [LLMMessagesFrame([{
-                    "role": "user",
-                    "content": "Guest joined. Briefly introduce yourself as Boswell, mention the interview topic, and ask your first question. Keep the intro to 1-2 sentences."
-                }])]
-            )
+            actual_context.add_message({
+                "role": "user",
+                "content": "Guest joined. Briefly introduce yourself as Boswell, mention the interview topic, and ask your first question. Keep the intro to 1-2 sentences."
+            })
+        await task.queue_frames([OpenAILLMContextFrame(context=actual_context)])
 
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant, reason):
