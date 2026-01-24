@@ -140,6 +140,8 @@ async def project_new_submit(
     user: User = Depends(require_auth),
     name: str = Form(...),
     topic: str = Form(...),
+    public_description: Optional[str] = Form(None),
+    intro_prompt: Optional[str] = Form(None),
     template_id: Optional[str] = Form(None),
     target_minutes: int = Form(30),
     research_urls: Optional[str] = Form(None),
@@ -244,12 +246,18 @@ async def project_new_submit(
         except Exception as e:
             logger.warning(f"Failed to generate questions: {e}")
 
+    # Clean optional string fields
+    public_desc = public_description.strip() if public_description else None
+    intro = intro_prompt.strip() if intro_prompt else None
+
     # Create the project (WITHOUT interview)
     project = Project(
         team_id=user.team_id,
         template_id=parsed_template_id,
         name=name,
         topic=topic,
+        public_description=public_desc if public_desc else None,
+        intro_prompt=intro if intro else None,
         target_minutes=target_minutes,
         created_by=user.id,
         research_summary=research_summary,
@@ -1319,6 +1327,8 @@ async def edit_project(
     project_id: UUID,
     name: str = Form(...),
     topic: str = Form(...),
+    public_description: str = Form(""),
+    intro_prompt: str = Form(""),
     research_summary: str = Form(""),
     questions_text: str = Form(""),
     user: User = Depends(require_auth),
@@ -1338,6 +1348,8 @@ async def edit_project(
     # Update fields
     project.name = name.strip()
     project.topic = topic.strip()
+    project.public_description = public_description.strip() if public_description.strip() else None
+    project.intro_prompt = intro_prompt.strip() if intro_prompt.strip() else None
     project.research_summary = research_summary.strip() if research_summary.strip() else None
 
     # Parse questions (one per line)

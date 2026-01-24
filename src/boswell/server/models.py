@@ -135,6 +135,10 @@ class Project(Base):
     public_link_token: Mapped[Optional[str]] = mapped_column(
         String(64), unique=True, nullable=True, index=True
     )
+    # Public description shown to guests on landing page (separate from topic which guides AI)
+    public_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Short intro prompt for how Boswell greets guests (e.g., "your experience with our product")
+    intro_prompt: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="projects")

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Join Interview - {{ project.topic }}{% endblock %}
+{% block title %}Join Interview{% if project.name %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block head %}
 <style>
@@ -122,7 +122,11 @@
         </div>
 
         <h1 class="welcome-title">Welcome to Boswell</h1>
-        <p class="welcome-topic">{{ project.topic }}</p>
+        {% if project.public_description %}
+        <p class="welcome-topic">{{ project.public_description }}</p>
+        {% elif project.name %}
+        <p class="welcome-topic">{{ project.name }}</p>
+        {% endif %}
 
         <div class="duration-badge">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

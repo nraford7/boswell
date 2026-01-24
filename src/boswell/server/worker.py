@@ -98,6 +98,7 @@ async def start_voice_interview(
     # Get guest name and context
     guest_name = getattr(interview, 'name', None) or "Guest"
     interview_context = getattr(interview, 'context_notes', None)
+    intro_prompt = getattr(project, 'intro_prompt', None)
 
     # Build the system prompt with interview context
     system_prompt = build_system_prompt(
@@ -106,6 +107,7 @@ async def start_voice_interview(
         research_summary=project.research_summary,
         interview_context=interview_context,
         interviewee_name=guest_name,
+        intro_prompt=intro_prompt,
         target_minutes=project.target_minutes,
         max_minutes=project.target_minutes + 15,  # Allow 15 min buffer
     )

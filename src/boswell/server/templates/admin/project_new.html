@@ -141,7 +141,19 @@
                 <div class="form-group">
                     <label for="topic">Research Topic / Intent <span class="required">*</span></label>
                     <textarea id="topic" name="topic" required rows="3" placeholder="Understanding customer pain points with onboarding and identifying opportunities for improvement."></textarea>
-                    <p class="form-hint">Describe the purpose and goals of this research.</p>
+                    <p class="form-hint">Private instructions for Boswell. Guides question generation and interview focus.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="public_description">Public Description</label>
+                    <textarea id="public_description" name="public_description" rows="2" placeholder="We'd love to hear about your experience with our product."></textarea>
+                    <p class="form-hint">Optional: What guests see on the public interview link landing page.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="intro_prompt">Introduction Message</label>
+                    <input type="text" id="intro_prompt" name="intro_prompt" placeholder="your experience with our onboarding process">
+                    <p class="form-hint">How Boswell introduces the interview: "Hi [Name], I'm here to interview you about [this text]. Ready?"</p>
                 </div>
 
                 <div class="form-group">

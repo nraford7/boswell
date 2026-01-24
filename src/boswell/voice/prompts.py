@@ -7,6 +7,7 @@ def build_system_prompt(
     research_summary: str | None = None,
     interview_context: str | None = None,
     interviewee_name: str | None = None,
+    intro_prompt: str | None = None,
     target_minutes: int = 30,
     max_minutes: int = 45,
 ) -> str:
@@ -18,6 +19,7 @@ def build_system_prompt(
         research_summary: Optional project-level research summary.
         interview_context: Optional interview-level context about this specific person.
         interviewee_name: Name of the person being interviewed.
+        intro_prompt: Short description for greeting (e.g., "your experience with our product").
         target_minutes: Target interview length in minutes.
         max_minutes: Maximum interview length in minutes.
 
@@ -48,6 +50,15 @@ PERSONALIZATION INSTRUCTIONS:
 
 """
 
+    intro_section = ""
+    if intro_prompt:
+        intro_section = f"""
+INTRODUCTION FORMAT:
+When greeting the guest, say exactly: "Hi {interviewee_name or 'there'}, I'm Boswell. I'm here to interview you about {intro_prompt}. Ready?"
+Keep this format - warm, brief, and ready to begin.
+
+"""
+
     return f"""You are Boswell, a skilled AI research interviewer conducting an interview about: {topic}
 
 INTERVIEW STYLE:
@@ -69,7 +80,7 @@ IMMEDIATE ACKNOWLEDGMENTS:
 - This shows you're listening and gives you a moment to formulate your next question
 - Then follow with your substantive response or next question
 
-{research_section}{interview_context_section}PREPARED QUESTIONS (use as a guide, personalize based on interviewee context):
+{intro_section}{research_section}{interview_context_section}PREPARED QUESTIONS (use as a guide, personalize based on interviewee context):
 {questions_text}
 
 GUIDELINES:
@@ -110,6 +121,27 @@ RESPONSE FORMAT:
 Remember: The prepared questions are a guide, not a script. Personalize them based on what you know about this specific interviewee. Your goal is to have a genuine, insightful conversation."""
 
 
+def build_greeting_prompt(
+    interviewee_name: str | None = None,
+    intro_prompt: str | None = None,
+) -> str:
+    """Build the greeting prompt for when the guest joins.
+
+    Args:
+        interviewee_name: Name of the guest.
+        intro_prompt: Short description of the interview focus.
+
+    Returns:
+        Greeting prompt string for Claude.
+    """
+    name = interviewee_name or "there"
+    if intro_prompt:
+        return f"""The guest has just joined the interview room. Greet them by saying: "Hi {name}, I'm Boswell. I'm here to interview you about {intro_prompt}. Ready?" Keep it exactly this format - warm, brief, and ready to begin."""
+    else:
+        return f"""The guest has just joined the interview room. Greet them warmly by name ({name}), introduce yourself as Boswell, briefly explain that you'll be conducting an interview, and ask if they're ready to begin. Keep it friendly and natural - about 2-3 sentences."""
+
+
+# Legacy constant for backwards compatibility
 GREETING_PROMPT = """The guest has just joined the interview room. Greet them warmly, introduce yourself as Boswell, briefly explain that you'll be conducting an interview on the topic, and ask if they're ready to begin. Keep it friendly and natural - about 2-3 sentences."""
 
 

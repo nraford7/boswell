@@ -93,7 +93,20 @@
             <div class="form-section">
                 <h3>Research Topic / Intent</h3>
                 <textarea name="topic" required placeholder="Describe the purpose and intent of this research...">{{ project.topic }}</textarea>
-                <p class="help-text">The research goals and what you want to learn.</p>
+                <p class="help-text">Private instructions for Boswell. Guides question generation and interview focus.</p>
+            </div>
+
+            <div class="form-section">
+                <h3>Public Description</h3>
+                <textarea name="public_description" placeholder="What guests see on the public interview link landing page...">{{ project.public_description or '' }}</textarea>
+                <p class="help-text">Optional: Shown to guests on the public landing page. Leave blank to show project name only.</p>
+            </div>
+
+            <div class="form-section">
+                <h3>Introduction Message</h3>
+                <input type="text" name="intro_prompt" value="{{ project.intro_prompt or '' }}"
+                       placeholder="e.g., your experience with our onboarding process">
+                <p class="help-text">How Boswell introduces the interview: "Hi [Name], I'm here to interview you about [this text]. Ready?"</p>
             </div>
 
             <div class="form-section">
