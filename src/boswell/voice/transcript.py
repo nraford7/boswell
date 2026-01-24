@@ -8,8 +8,10 @@ from typing import Any
 
 from pipecat.frames.frames import (
     Frame,
+    LLMFullResponseEndFrame,
     TextFrame,
     TranscriptionFrame,
+    UserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -40,58 +42,55 @@ class TranscriptCollector(FrameProcessor):
 
     Captures:
     - TranscriptionFrame: Guest speech (from Deepgram STT)
-    - TextFrame: Bot responses (from Claude via TTS)
+    - UserStoppedSpeakingFrame: Flushes accumulated guest speech as one entry
+
+    Guest speech is aggregated until they stop speaking, then flushed as a
+    complete utterance rather than fragmented chunks.
     """
 
     def __init__(self, guest_name: str = "Guest", **kwargs):
         super().__init__(**kwargs)
         self.guest_name = guest_name
         self.entries: list[TranscriptEntry] = []
-        self._current_bot_text: str = ""
-        self._last_guest_text: str = ""
+        self._current_guest_text: str = ""
+        self._guest_turn_start: str | None = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Process frames and capture transcript entries."""
         await super().process_frame(frame, direction)
 
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        # Capture guest speech from STT
+        # Accumulate guest speech from STT
         if isinstance(frame, TranscriptionFrame):
-            # Only capture final transcriptions, not interim
             if frame.text and frame.text.strip():
-                # Avoid duplicate entries
-                if frame.text != self._last_guest_text:
-                    self._last_guest_text = frame.text
-                    self.entries.append(
-                        TranscriptEntry(
-                            timestamp=timestamp,
-                            speaker=self.guest_name,
-                            text=frame.text.strip(),
-                        )
-                    )
+                # Record timestamp of first speech in this turn
+                if not self._guest_turn_start:
+                    self._guest_turn_start = datetime.now(timezone.utc).isoformat()
+                # Accumulate text (add space between chunks)
+                if self._current_guest_text:
+                    self._current_guest_text += " " + frame.text.strip()
+                else:
+                    self._current_guest_text = frame.text.strip()
 
-        # Capture bot speech going to TTS
-        elif isinstance(frame, TextFrame):
-            # TextFrames contain chunks of bot response
-            if frame.text:
-                self._current_bot_text += frame.text
+        # Flush guest speech when they stop speaking
+        elif isinstance(frame, UserStoppedSpeakingFrame):
+            self._flush_guest_text()
 
         # Push frame downstream
         await self.push_frame(frame, direction)
 
-    def flush_bot_text(self) -> None:
-        """Flush accumulated bot text as a transcript entry."""
-        if self._current_bot_text.strip():
-            timestamp = datetime.now(timezone.utc).isoformat()
+    def _flush_guest_text(self) -> None:
+        """Flush accumulated guest text as a single transcript entry."""
+        if self._current_guest_text.strip():
+            timestamp = self._guest_turn_start or datetime.now(timezone.utc).isoformat()
             self.entries.append(
                 TranscriptEntry(
                     timestamp=timestamp,
-                    speaker="boswell",
-                    text=self._current_bot_text.strip(),
+                    speaker=self.guest_name,
+                    text=self._current_guest_text.strip(),
                 )
             )
-            self._current_bot_text = ""
+            self._current_guest_text = ""
+            self._guest_turn_start = None
 
     def to_json(self) -> str:
         """Export transcript as JSON string."""
@@ -130,14 +129,16 @@ class TranscriptCollector(FrameProcessor):
 class BotResponseCollector(FrameProcessor):
     """Collects complete bot responses by detecting response boundaries.
 
-    This processor sits after the LLM and captures full responses
-    rather than individual text chunks.
+    This processor sits after the LLM and captures full responses.
+    Flushes when LLMFullResponseEndFrame is received, ensuring each
+    Boswell response is captured as a complete entry.
     """
 
     def __init__(self, transcript_collector: TranscriptCollector, **kwargs):
         super().__init__(**kwargs)
         self._transcript = transcript_collector
         self._current_response = ""
+        self._response_start: str | None = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Process frames and capture complete bot responses."""
@@ -145,15 +146,21 @@ class BotResponseCollector(FrameProcessor):
 
         # Accumulate text frames
         if isinstance(frame, TextFrame) and frame.text:
+            if not self._response_start:
+                self._response_start = datetime.now(timezone.utc).isoformat()
             self._current_response += frame.text
+
+        # Flush when LLM response is complete
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            self._flush()
 
         # Push frame downstream
         await self.push_frame(frame, direction)
 
-    def flush(self) -> None:
+    def _flush(self) -> None:
         """Flush the current response to the transcript."""
         if self._current_response.strip():
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = self._response_start or datetime.now(timezone.utc).isoformat()
             self._transcript.entries.append(
                 TranscriptEntry(
                     timestamp=timestamp,
@@ -162,3 +169,8 @@ class BotResponseCollector(FrameProcessor):
                 )
             )
             self._current_response = ""
+            self._response_start = None
+
+    def flush(self) -> None:
+        """Public flush for end-of-interview cleanup."""
+        self._flush()
