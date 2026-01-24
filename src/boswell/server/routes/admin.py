@@ -1231,10 +1231,11 @@ async def download_transcript(
     request: Request,
     project_id: UUID,
     interview_id: UUID,
+    format: str = "json",
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Download the transcript as JSON."""
+    """Download the transcript as JSON or Markdown."""
     # Fetch the interview with transcript and project
     result = await db.execute(
         select(Interview)
@@ -1257,7 +1258,49 @@ async def download_transcript(
     if not interview.transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
-    # Build download data
+    # Sanitize name for filename
+    safe_name = interview.name.lower().replace(' ', '-').replace('/', '-')
+
+    if format == "md":
+        # Build Markdown content
+        lines = [
+            f"# Interview Transcript: {interview.name}",
+            "",
+            f"**Topic:** {interview.project.topic}",
+            "",
+        ]
+        if interview.email:
+            lines.append(f"**Email:** {interview.email}")
+        if interview.completed_at:
+            lines.append(f"**Date:** {interview.completed_at.strftime('%B %d, %Y at %I:%M %p')}")
+        lines.extend(["", "---", ""])
+
+        entries = interview.transcript.entries or []
+        for entry in entries:
+            if entry.get("struck"):
+                continue  # Skip struck entries
+            speaker = entry.get("speaker", "Unknown")
+            text = entry.get("text", "")
+            # Format speaker name nicely
+            if speaker.lower() == "boswell":
+                lines.append(f"**Boswell:** {text}")
+            else:
+                lines.append(f"**{speaker}:** {text}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        filename = f"transcript-{safe_name}-{interview_id}.md"
+
+        from fastapi.responses import Response
+        return Response(
+            content=content,
+            media_type="text/markdown",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            },
+        )
+
+    # Default: JSON format
     download_data = {
         "interview": {
             "id": str(interview.id),
@@ -1273,8 +1316,7 @@ async def download_transcript(
         "transcript": interview.transcript.entries or [],
     }
 
-    # Return as downloadable JSON
-    filename = f"transcript-{interview.name.lower().replace(' ', '-')}-{interview_id}.json"
+    filename = f"transcript-{safe_name}-{interview_id}.json"
     return JSONResponse(
         content=download_data,
         headers={

@@ -143,13 +143,22 @@
             {% endif %}
             <span>{{ entries|length }} entries</span>
         </div>
-        <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download"
-           class="btn btn-outline download-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Download JSON
-        </a>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download?format=md"
+               class="btn btn-primary download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download MD
+            </a>
+            <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download?format=json"
+               class="btn btn-outline download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download JSON
+            </a>
+        </div>
     </div>
 
     <div class="transcript-container">
