@@ -16,6 +16,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from boswell.server.config import get_settings
 from boswell.server.database import get_session_context
 from boswell.server.models import Interview, InterviewStatus, Project, Transcript
 from boswell.voice.pipeline import run_interview
@@ -74,7 +75,8 @@ async def start_voice_interview(
 
     # Build room URL from room_name
     # The room_name is like "boswell-{interview_id[:8]}"
-    room_url = f"https://emirbot.daily.co/{interview.room_name}"
+    settings = get_settings()
+    room_url = f"https://{settings.daily_domain}.daily.co/{interview.room_name}"
 
     # Get the bot token (stored in interview.room_token)
     # Note: In current implementation, room_token is an interview token

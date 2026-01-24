@@ -29,6 +29,7 @@ class Settings:
 
     # External services
     daily_api_key: str
+    daily_domain: str  # Daily.co subdomain (e.g., "emirbot" for emirbot.daily.co)
     claude_api_key: str
     deepgram_api_key: str
     elevenlabs_api_key: str
@@ -79,6 +80,7 @@ class Settings:
         return cls(
             database_url=_require_env("DATABASE_URL"),
             daily_api_key=_require_env("DAILY_API_KEY"),
+            daily_domain=os.environ.get("DAILY_DOMAIN", "emirbot"),
             claude_api_key=_require_env("CLAUDE_API_KEY"),
             deepgram_api_key=_require_env("DEEPGRAM_API_KEY"),
             elevenlabs_api_key=_require_env("ELEVENLABS_API_KEY"),

@@ -128,36 +128,55 @@
         }
     };
 
-    // Create Daily frame with theme
-    const callFrame = window.DailyIframe.createFrame(
-        document.getElementById('daily-container'),
-        {
-            iframeStyle: {
-                width: '100%',
-                height: '100%',
-                border: 'none'
-            },
-            showLeaveButton: true,
-            showFullscreenButton: true,
-            theme: boswellTheme
-        }
-    );
+    const roomUrl = '{{ room_url }}';
+    const roomToken = '{{ room_token }}';
 
-    // Join the room with token
-    callFrame.join({
-        url: '{{ room_url }}',
-        token: '{{ room_token }}',
-        theme: boswellTheme
-    }).then(() => {
-        document.getElementById('loading').classList.add('hidden');
-    }).catch((error) => {
-        console.error('Failed to join room:', error);
-        document.querySelector('.loading-text').textContent = 'Failed to connect. Please refresh.';
-    });
+    console.log('Daily.co room URL:', roomUrl);
+    console.log('Daily.co token present:', !!roomToken);
 
-    // Handle leaving
-    callFrame.on('left-meeting', () => {
-        window.location.href = '/i/{{ interview.magic_token }}/complete';
-    });
+    // Check if Daily SDK loaded
+    if (!window.DailyIframe) {
+        console.error('Daily.co SDK failed to load');
+        document.querySelector('.loading-text').textContent = 'Failed to load video. Please refresh.';
+    } else {
+        console.log('Daily.co SDK loaded successfully');
+
+        // Create Daily frame with theme
+        const callFrame = window.DailyIframe.createFrame(
+            document.getElementById('daily-container'),
+            {
+                iframeStyle: {
+                    width: '100%',
+                    height: '100%',
+                    border: 'none'
+                },
+                showLeaveButton: true,
+                showFullscreenButton: true,
+                theme: boswellTheme
+            }
+        );
+
+        // Join the room (token only, theme already set in createFrame)
+        callFrame.join({
+            url: roomUrl,
+            token: roomToken
+        }).then(() => {
+            console.log('Successfully joined Daily.co room');
+            document.getElementById('loading').classList.add('hidden');
+        }).catch((error) => {
+            console.error('Failed to join room:', error);
+            document.querySelector('.loading-text').textContent = 'Failed to connect: ' + (error.message || 'Unknown error');
+        });
+
+        // Handle leaving - redirect to thank you page
+        callFrame.on('left-meeting', () => {
+            window.location.href = '/i/{{ interview.magic_token }}/thankyou';
+        });
+
+        // Debug events
+        callFrame.on('error', (e) => {
+            console.error('Daily.co error:', e);
+        });
+    }
 </script>
 {% endblock %}
