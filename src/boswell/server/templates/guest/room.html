@@ -3,7 +3,6 @@
 {% block title %}Interview Room - Boswell{% endblock %}
 
 {% block head %}
-<script src="https://unpkg.com/@daily-co/daily-js"></script>
 <style>
     html, body {
         margin: 0;
@@ -27,16 +26,12 @@
         flex-direction: column;
     }
 
-    #daily-container {
+    #daily-iframe {
         flex: 1;
-        width: 100%;
-        background-color: #0a0a0c;
-    }
-
-    #daily-container iframe {
         width: 100%;
         height: 100%;
         border: none;
+        background-color: #0a0a0c;
     }
 
     .loading-state {
@@ -106,86 +101,29 @@
         <div class="loading-logo">Boswell</div>
         <div class="loading-spinner"></div>
         <p class="loading-text">Connecting to interview room...</p>
-        <!-- Debug info (remove in production) -->
-        <p id="debug-info" style="font-size: 0.75rem; color: #666; margin-top: 2rem; word-break: break-all; max-width: 80%; text-align: center;"></p>
     </div>
 
-    <div id="daily-container"></div>
+    <iframe
+        id="daily-iframe"
+        src="{{ room_url }}?t={{ room_token }}"
+        allow="microphone; camera; autoplay; display-capture"
+    ></iframe>
 </div>
 
 <script>
-    // Boswell black & gold theme
-    const boswellTheme = {
-        colors: {
-            accent: '#d4a855',
-            accentText: '#0a0a0c',
-            background: '#0a0a0c',
-            backgroundAccent: '#18181c',
-            baseText: '#f5f5f0',
-            border: '#333338',
-            mainAreaBg: '#0a0a0c',
-            mainAreaBgAccent: '#111114',
-            mainAreaText: '#f5f5f0',
-            supportiveText: '#888888'
-        }
-    };
+    const iframe = document.getElementById('daily-iframe');
 
-    const roomUrl = '{{ room_url }}';
-    const roomToken = '{{ room_token }}';
+    // Hide loading when iframe loads
+    iframe.addEventListener('load', function() {
+        document.getElementById('loading').classList.add('hidden');
+    });
 
-    console.log('Daily.co room URL:', roomUrl);
-    console.log('Daily.co token present:', !!roomToken);
-    console.log('Daily.co token (first 20 chars):', roomToken.substring(0, 20));
-
-    // Show debug info on page
-    const debugEl = document.getElementById('debug-info');
-    if (debugEl) {
-        debugEl.textContent = 'Room: ' + roomUrl + ' | Token: ' + (roomToken ? 'present (' + roomToken.length + ' chars)' : 'MISSING');
-    }
-
-    // Check if Daily SDK loaded
-    if (!window.DailyIframe) {
-        console.error('Daily.co SDK failed to load');
-        document.querySelector('.loading-text').textContent = 'Failed to load video. Please refresh.';
-    } else {
-        console.log('Daily.co SDK loaded successfully');
-
-        // Create Daily frame with theme
-        const callFrame = window.DailyIframe.createFrame(
-            document.getElementById('daily-container'),
-            {
-                iframeStyle: {
-                    width: '100%',
-                    height: '100%',
-                    border: 'none'
-                },
-                showLeaveButton: true,
-                showFullscreenButton: true,
-                theme: boswellTheme
-            }
-        );
-
-        // Join the room (token only, theme already set in createFrame)
-        callFrame.join({
-            url: roomUrl,
-            token: roomToken
-        }).then(() => {
-            console.log('Successfully joined Daily.co room');
-            document.getElementById('loading').classList.add('hidden');
-        }).catch((error) => {
-            console.error('Failed to join room:', error);
-            document.querySelector('.loading-text').textContent = 'Failed to connect: ' + (error.message || 'Unknown error');
-        });
-
-        // Handle leaving - redirect to thank you page
-        callFrame.on('left-meeting', () => {
+    // Listen for messages from Daily iframe (for leave detection)
+    window.addEventListener('message', function(event) {
+        // Daily sends messages when participant leaves
+        if (event.data && event.data.action === 'left-meeting') {
             window.location.href = '/i/{{ interview.magic_token }}/thankyou';
-        });
-
-        // Debug events
-        callFrame.on('error', (e) => {
-            console.error('Daily.co error:', e);
-        });
-    }
+        }
+    });
 </script>
 {% endblock %}
