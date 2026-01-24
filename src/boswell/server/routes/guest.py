@@ -59,30 +59,17 @@ async def create_daily_room(interview_id: str, guest_name: str = "Guest") -> dic
             },
         )
 
-        room_data = None
-        if response.status_code in (200, 201):
-            room_data = response.json()
-            logger.info(f"Created Daily room: {room_data.get('url')}")
-        elif "already exists" in response.text.lower():
-            # Room exists, fetch it
-            logger.info(f"Room {room_name} already exists, fetching")
-            fetch_response = await client.get(
-                f"{DAILY_API_URL}/rooms/{room_name}",
-                headers={"Authorization": f"Bearer {settings.daily_api_key}"},
-            )
-            if fetch_response.status_code == 200:
-                room_data = fetch_response.json()
+        if response.status_code not in (200, 201):
+            # Room might already exist, try to get it
+            if "already exists" in response.text.lower():
+                logger.info(f"Room {room_name} already exists, reusing")
             else:
-                logger.error(f"Failed to fetch existing room: {fetch_response.text}")
-                raise RuntimeError(f"Failed to fetch existing room: {fetch_response.text}")
-        else:
-            error_text = response.text
-            logger.error(f"Failed to create Daily room: {error_text}")
-            raise RuntimeError(f"Failed to create Daily room: {error_text}")
+                error_text = response.text
+                logger.error(f"Failed to create Daily room: {error_text}")
+                raise RuntimeError(f"Failed to create Daily room: {error_text}")
 
-        # Get room URL from API response
-        room_url = room_data.get("url") or f"https://{settings.daily_domain}.daily.co/{room_name}"
-        logger.info(f"Using room URL: {room_url}")
+        # Get room URL (create response or fetch existing)
+        room_url = f"https://emirbot.daily.co/{room_name}"
 
         # Create a meeting token for the guest
         token_response = await client.post(
@@ -321,8 +308,7 @@ async def interview_room(
         )
 
     # Build room URL (token passed separately for daily-js SDK)
-    settings = get_settings()
-    room_url = f"https://{settings.daily_domain}.daily.co/{interview.room_name}"
+    room_url = f"https://emirbot.daily.co/{interview.room_name}"
 
     return templates.TemplateResponse(
         request=request,
