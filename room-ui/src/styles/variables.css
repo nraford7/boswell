@@ -1,0 +1,60 @@
+:root {
+  /* Boswell dark palette - matches base.html */
+  --bg-deep: #0a0a0c;
+  --bg-elevated: #111114;
+  --bg-surface: #18181c;
+  --bg-hover: #222228;
+
+  /* Text */
+  --fg: #f5f5f0;
+  --fg-muted: #a1a1aa;
+  --fg-dim: #71717a;
+
+  /* Accent - Gold */
+  --accent: #d4a855;
+  --accent-hover: #e4bc6a;
+  --accent-glow: rgba(212, 168, 85, 0.15);
+  --accent-subtle: rgba(212, 168, 85, 0.08);
+
+  /* Status */
+  --error: #ef4444;
+  --success: #22c55e;
+
+  /* Borders */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(212, 168, 85, 0.3);
+
+  /* Typography */
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+
+  /* Spacing */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #room-root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--fg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

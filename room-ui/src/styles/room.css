@@ -1,0 +1,197 @@
+/* Room Container */
+.room {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-deep);
+  position: relative;
+}
+
+/* Loading Screen */
+.loading-screen {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-glow {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: pulse 3s ease-in-out infinite;
+}
+
+.loading-logo {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  z-index: 1;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  z-index: 1;
+}
+
+.loading-text {
+  font-size: 14px;
+  color: var(--fg-muted);
+  z-index: 1;
+}
+
+/* Branding */
+.branding {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+}
+
+.branding-logo {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+/* Controls */
+.controls {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  z-index: 10;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.control-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.control-btn.muted {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.control-btn.muted:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.control-btn.leave {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.control-btn.leave:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.control-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--fg);
+}
+
+/* Error Screen */
+.error-screen {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.error-title {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--error);
+}
+
+.error-message {
+  font-size: 16px;
+  color: var(--fg-muted);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.error-btn {
+  margin-top: 8px;
+  padding: 12px 24px;
+  background: var(--accent);
+  color: var(--bg-deep);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.error-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
