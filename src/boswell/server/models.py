@@ -118,9 +118,11 @@ class Project(Base):
     template_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("interview_templates.id", ondelete="SET NULL"), nullable=True
     )
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     topic: Mapped[str] = mapped_column(String(500), nullable=False)
     questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     target_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     created_by: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -157,6 +159,8 @@ class Interview(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     bio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    context_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    context_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     magic_token: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, default=generate_magic_token
     )
