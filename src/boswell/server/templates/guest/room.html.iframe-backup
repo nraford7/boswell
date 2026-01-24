@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Interview Room - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background-color: var(--bg-deep);
+    }
+
+    body::before {
+        display: none;
+    }
+
+    .room-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .room-iframe {
+        flex: 1;
+        width: 100%;
+        border: none;
+        background-color: #000;
+    }
+
+    .loading-state {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: var(--bg-deep);
+        z-index: 10;
+        transition: opacity 0.5s ease;
+    }
+
+    .loading-state.hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .loading-logo {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        color: var(--fg);
+        margin-bottom: 2rem;
+        letter-spacing: -0.02em;
+    }
+
+    .loading-spinner {
+        width: 48px;
+        height: 48px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .loading-text {
+        margin-top: 1.5rem;
+        color: var(--fg-dim);
+        font-size: 0.9375rem;
+    }
+
+    /* Ambient glow behind loading */
+    .loading-glow {
+        position: absolute;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+        opacity: 0.5;
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="room-container">
+    <div id="loading" class="loading-state">
+        <div class="loading-glow"></div>
+        <div class="loading-logo">Boswell</div>
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Connecting to interview room...</p>
+    </div>
+
+    <iframe
+        id="daily-iframe"
+        class="room-iframe"
+        src="{{ room_url }}"
+        allow="camera; microphone; fullscreen; display-capture; autoplay"
+        onload="document.getElementById('loading').classList.add('hidden')"
+    ></iframe>
+</div>
+{% endblock %}
