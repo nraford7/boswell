@@ -245,13 +245,22 @@ def generate_questions(
     Raises:
         RuntimeError: If config is not found or API key is missing.
     """
+    import os
+
+    # Try CLI config first, fall back to environment variable (for server)
+    api_key = None
     config = load_config()
-    if config is None or not config.claude_api_key:
+    if config and config.claude_api_key:
+        api_key = config.claude_api_key
+    else:
+        api_key = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+
+    if not api_key:
         raise RuntimeError(
-            "Claude API key not configured. Run 'boswell init' to set up."
+            "Claude API key not configured. Set CLAUDE_API_KEY environment variable or run 'boswell init'."
         )
 
-    client = anthropic.Anthropic(api_key=config.claude_api_key)
+    client = anthropic.Anthropic(api_key=api_key)
 
     prompt = f"""You are helping prepare for a research interview about: {topic}
 
