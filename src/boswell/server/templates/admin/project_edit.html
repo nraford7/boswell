@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Edit {{ project.topic }} - Boswell{% endblock %}
+{% block title %}Edit {{ project.name or project.topic }} - Boswell{% endblock %}
 
 {% block head %}
 <style>
@@ -84,9 +84,16 @@
     <div class="card">
         <form method="post" action="/admin/projects/{{ project.id }}/edit">
             <div class="form-section">
-                <h3>Project Name / Topic</h3>
-                <input type="text" name="topic" value="{{ project.topic }}" required
-                       placeholder="e.g., Future of AI in Healthcare">
+                <h3>Project Name</h3>
+                <input type="text" name="name" value="{{ project.name or '' }}" required
+                       placeholder="e.g., Q1 Customer Research">
+                <p class="help-text">A short, memorable name for this project.</p>
+            </div>
+
+            <div class="form-section">
+                <h3>Research Topic / Intent</h3>
+                <textarea name="topic" required placeholder="Describe the purpose and intent of this research...">{{ project.topic }}</textarea>
+                <p class="help-text">The research goals and what you want to learn.</p>
             </div>
 
             <div class="form-section">

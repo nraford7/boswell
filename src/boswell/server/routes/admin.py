@@ -1211,6 +1211,7 @@ async def edit_project_form(
 async def edit_project(
     request: Request,
     project_id: UUID,
+    name: str = Form(...),
     topic: str = Form(...),
     research_summary: str = Form(""),
     questions_text: str = Form(""),
@@ -1229,6 +1230,7 @@ async def edit_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Update fields
+    project.name = name.strip()
     project.topic = topic.strip()
     project.research_summary = research_summary.strip() if research_summary.strip() else None
 
