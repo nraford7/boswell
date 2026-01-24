@@ -359,6 +359,144 @@ async def disable_public_link(
 
 
 # -----------------------------------------------------------------------------
+# Interview Creation Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/interviews/new")
+async def interview_new_form(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the new interview form for a project."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/interview_new.html",
+        context={
+            "user": user,
+            "project": project,
+        },
+    )
+
+
+@router.post("/projects/{project_id}/interviews/new")
+async def interview_new_submit(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    name: str = Form(...),
+    email: Optional[str] = Form(None),
+    context_notes: Optional[str] = Form(None),
+    context_urls: Optional[str] = Form(None),
+    context_files: list[UploadFile] = File(default=[]),
+    action: str = Form("create"),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a new interview for a project."""
+    # Fetch project
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Validate name
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Clean email
+    email = email.strip().lower() if email else None
+
+    # Process context materials
+    context_parts = []
+    context_links = []
+
+    # Add notes if provided
+    if context_notes and context_notes.strip():
+        context_parts.append(context_notes.strip())
+
+    # Process context URLs
+    if context_urls and INGESTION_AVAILABLE:
+        urls = [u.strip() for u in context_urls.split("\n") if u.strip()]
+        for url in urls:
+            if url.startswith("http://") or url.startswith("https://"):
+                context_links.append(url)
+                try:
+                    url_content = await asyncio.to_thread(fetch_url, url)
+                    if url_content:
+                        context_parts.append(f"=== {url} ===\n{url_content}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch URL {url}: {e}")
+
+    # Process context files
+    if context_files and INGESTION_AVAILABLE:
+        for upload_file in context_files:
+            if upload_file.filename and upload_file.size and upload_file.size > 0:
+                try:
+                    suffix = Path(upload_file.filename).suffix
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        content = await upload_file.read()
+                        tmp.write(content)
+                        tmp_path = tmp.name
+
+                    doc_content = await asyncio.to_thread(read_document, Path(tmp_path))
+                    if doc_content:
+                        context_parts.append(f"=== {upload_file.filename} ===\n{doc_content}")
+
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Failed to process file {upload_file.filename}: {e}")
+
+    # Combine context
+    combined_context = "\n\n".join(context_parts) if context_parts else None
+
+    # Create interview
+    interview = Interview(
+        project_id=project_id,
+        name=name,
+        email=email,
+        context_notes=combined_context,
+        context_links=context_links if context_links else None,
+    )
+    db.add(interview)
+    await db.flush()
+
+    # Send invitation email if requested and email provided
+    if action == "create_and_invite" and email:
+        settings = get_settings()
+        magic_link = f"{settings.base_url}/i/{interview.magic_token}"
+        await send_invitation_email(
+            to=email,
+            guest_name=name,
+            interview_topic=project.topic,
+            magic_link=magic_link,
+        )
+        logger.info(f"Sent invitation email to {email} for interview {interview.id}")
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+# -----------------------------------------------------------------------------
 # Template Routes
 # -----------------------------------------------------------------------------
 

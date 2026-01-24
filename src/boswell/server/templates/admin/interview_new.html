@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Add Interview - {{ project.name or project.topic }} - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header { padding-top: 2rem; margin-bottom: 2rem; }
+    .page-title { font-family: var(--font-display); font-size: 2rem; font-weight: 400; color: var(--fg); margin-bottom: 0.25rem; }
+    .page-subtitle { color: var(--fg-dim); font-size: 0.875rem; }
+    .form-card { max-width: 680px; }
+    .form-section { margin-bottom: 2rem; }
+    .form-section-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; color: var(--fg); margin-bottom: 0.5rem; }
+    .form-section-desc { color: var(--fg-dim); font-size: 0.875rem; margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: 1.5rem; }
+    .form-group label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--fg); margin-bottom: 0.5rem; }
+    .form-group .required { color: var(--accent); }
+    .form-hint { font-size: 0.8125rem; color: var(--fg-dim); margin-top: 0.5rem; }
+    .form-divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    .file-upload { border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 1.5rem; text-align: center; cursor: pointer; transition: all var(--transition-fast); }
+    .file-upload:hover { border-color: var(--accent); background-color: var(--accent-subtle); }
+    .file-upload input[type="file"] { border: none; padding: 0; background: transparent; text-align: center; }
+    .file-upload-label { display: block; color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
+    .submit-btn { padding: 1rem 1.5rem; font-size: 1rem; }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Projects</a>
+            <a href="/admin/templates">Interview Types</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <a href="/admin/projects/{{ project.id }}" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Back to Project
+        </a>
+        <h1 class="page-title">Add Interview</h1>
+        <p class="page-subtitle">{{ project.name or project.topic }}</p>
+    </div>
+
+    <div class="card form-card">
+        <form method="post" action="/admin/projects/{{ project.id }}/interviews/new" enctype="multipart/form-data">
+            <div class="form-section">
+                <h3 class="form-section-title">Interviewee</h3>
+                <p class="form-section-desc">Who will be interviewed?</p>
+
+                <div class="form-group">
+                    <label for="name">Name <span class="required">*</span></label>
+                    <input type="text" id="name" name="name" required placeholder="Steve Johnson">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="steve@example.com">
+                    <p class="form-hint">Optional. Required if you want to send an invitation email.</p>
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <div class="form-section">
+                <h3 class="form-section-title">Background on This Person</h3>
+                <p class="form-section-desc">Optional: Give Boswell context about this specific interviewee to personalize the conversation.</p>
+
+                <div class="form-group">
+                    <label for="context_notes">Notes</label>
+                    <textarea id="context_notes" name="context_notes" rows="4" placeholder="VP of Operations at WidgetCorp, manufacturing industry. Been a customer for 2 years. Previously mentioned challenges with integration complexity."></textarea>
+                    <p class="form-hint">Background, role, company, previous interactions, areas of interest.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="context_urls">Links</label>
+                    <textarea id="context_urls" name="context_urls" rows="3" placeholder="https://linkedin.com/in/stevejohnson&#10;https://widgetcorp.com/about&#10;(one URL per line)"></textarea>
+                    <p class="form-hint">LinkedIn, company page, articles they've written.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="context_files">Documents</label>
+                    <div class="file-upload">
+                        <span class="file-upload-label">PDFs, text files, notes</span>
+                        <input type="file" id="context_files" name="context_files" multiple accept=".pdf,.txt,.md,.doc,.docx">
+                    </div>
+                    <p class="form-hint">Bio, previous meeting notes, relevant documents.</p>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button type="submit" name="action" value="create" class="btn submit-btn">Create Interview</button>
+                <button type="submit" name="action" value="create_and_invite" class="btn submit-btn btn-outline">Create & Send Invite</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
