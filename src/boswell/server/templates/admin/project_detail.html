@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project.topic }} - Boswell{% endblock %}
+{% block title %}{{ project.name or project.topic }} - Boswell{% endblock %}
 
 {% block head %}
 <style>
@@ -360,8 +360,11 @@
                     </svg>
                     All Projects
                 </a>
-                <h1 class="page-title">{{ project.topic }}</h1>
+                <h1 class="page-title">{{ project.name or project.topic }}</h1>
                 <p class="page-subtitle">
+                    {% if project.name %}
+                    {{ project.topic[:100] }}{% if project.topic|length > 100 %}...{% endif %} &middot;
+                    {% endif %}
                     {{ project.target_minutes }} min target
                     {% if project.template %} &middot; {{ project.template.name }}{% endif %}
                     &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
