@@ -44,6 +44,7 @@ class Settings:
     # Defaults
     session_expire_days: int = 7
     magic_link_expire_days: int = 7
+    debug: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -77,6 +78,9 @@ class Settings:
                 )
             secret_key = "dev-secret-change-me"
 
+        # Debug mode: explicitly enabled via DEBUG env var (Vite dev server has cross-origin issues)
+        debug = os.environ.get("DEBUG", "").lower() in ("true", "1", "yes")
+
         return cls(
             database_url=_require_env("DATABASE_URL"),
             daily_api_key=_require_env("DAILY_API_KEY"),
@@ -89,6 +93,7 @@ class Settings:
             secret_key=secret_key,
             base_url=os.environ.get("BASE_URL", "http://localhost:8000"),
             admin_emails=admin_emails,
+            debug=debug,
         )
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
+from starlette.staticfiles import StaticFiles
 
 from boswell.server.database import close_db, init_db
 
@@ -38,6 +39,9 @@ from boswell.server.routes import admin, auth, guest  # noqa: E402
 app.include_router(auth.router, prefix="/admin")
 app.include_router(admin.router)
 app.include_router(guest.router)  # No prefix - routes start with /i/
+
+# Mount static files for room-ui
+app.mount("/static", StaticFiles(directory=str(_TEMPLATE_DIR.parent / "static")), name="static")
 
 
 @app.get("/health")

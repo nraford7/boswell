@@ -81,6 +81,24 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # ==========================================================================
+  # Room UI (React/Vite)
+  # ==========================================================================
+  # Development server for the room-ui React application.
+  # Hot module reload enabled via Vite.
+  room-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.room-ui
+    container_name: boswell-room-ui
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./room-ui:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
 volumes:
   postgres-data:
     name: boswell-postgres-data

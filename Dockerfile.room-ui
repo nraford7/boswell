@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY room-ui/package*.json ./
+RUN npm install
+
+# Copy source (changes more often)
+COPY room-ui/ ./
+
+# Expose Vite dev server port
+EXPOSE 5173
+
+# Run Vite dev server
+CMD ["npm", "run", "dev"]
