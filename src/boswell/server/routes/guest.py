@@ -307,16 +307,19 @@ async def interview_room(
             status_code=303,
         )
 
-    # Build room URL with token
-    room_url = f"https://emirbot.daily.co/{interview.room_name}?t={interview.room_token}"
+    # Build room URL (token passed separately for React app)
+    settings = get_settings()
+    room_url = f"https://{settings.daily_domain}.daily.co/{interview.room_name}"
 
     return templates.TemplateResponse(
         request=request,
         name="guest/room.html",
         context={
+            "config": settings,
             "project": interview.project,
             "interview": interview,
             "room_url": room_url,
+            "room_token": interview.room_token,
         },
     )
 

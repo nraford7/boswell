@@ -18,6 +18,8 @@ from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
 from boswell.voice.acknowledgment import AcknowledgmentProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
 from boswell.voice.strike_control import StrikeControlProcessor
+# SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency issues
+# from boswell.voice.speaking_state import SpeakingStateProcessor
 
 
 async def create_pipeline(
@@ -138,6 +140,9 @@ async def create_pipeline(
     # Set up dynamic speed control (processes [SPEED:x] tags from LLM)
     speed_control_processor = SpeedControlProcessor(tts)
 
+    # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency
+    # speaking_state_processor = SpeakingStateProcessor()
+
     # Build the pipeline
     # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> strike -> speed -> bot_collector -> tts -> output
     pipeline = Pipeline(
@@ -152,6 +157,7 @@ async def create_pipeline(
             speed_control_processor,  # Process speed tags and adjust TTS
             bot_response_collector,  # Capture bot responses after LLM
             tts,
+            # speaking_state_processor,  # Disabled - latency issues
             transport.output(),
             context_aggregator.assistant(),
         ]
