@@ -7,8 +7,7 @@ from pipecat.frames.frames import EndFrame, LLMMessagesFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.services.anthropic.llm import AnthropicLLMService
+from pipecat.services.anthropic.llm import AnthropicLLMContext, AnthropicLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
@@ -28,7 +27,7 @@ async def create_pipeline(
     guest_name: str = "Guest",
     on_transcript_update: Callable | None = None,
     initial_messages: list[dict] | None = None,
-) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, OpenAILLMContext]:
+) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext]:
     """Create a Pipecat pipeline for voice interviews.
 
     Args:
@@ -41,7 +40,7 @@ async def create_pipeline(
         initial_messages: Optional conversation history for resuming paused interviews.
 
     Returns:
-        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector, OpenAILLMContext).
+        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext).
 
     Raises:
         RuntimeError: If required API keys are not configured.
@@ -100,16 +99,21 @@ async def create_pipeline(
         model="claude-sonnet-4-20250514",
     )
 
-    # Set up conversation context
+    # Set up conversation context with Anthropic-specific system parameter
     if initial_messages:
         # Resume from previous conversation history
-        messages = initial_messages
+        # Extract system message if present in history
+        system_msg = system_prompt
+        messages = []
+        for msg in initial_messages:
+            if msg.get("role") == "system":
+                system_msg = msg.get("content", system_prompt)
+            else:
+                messages.append(msg)
+        context = AnthropicLLMContext(messages=messages, system=system_msg)
     else:
         # Start fresh with system prompt
-        messages = [
-            {"role": "system", "content": system_prompt},
-        ]
-    context = OpenAILLMContext(messages)
+        context = AnthropicLLMContext(messages=[], system=system_prompt)
     context_aggregator = llm.create_context_aggregator(context)
 
     # Set up transcript collection
