@@ -765,17 +765,10 @@ async def invite_submit(
     request: Request,
     project_id: UUID,
     user: User = Depends(require_auth),
-    email: Optional[str] = Form(None),
-    name: Optional[str] = Form(None),
-    csv_file: Optional[UploadFile] = File(None),
+    csv_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_session),
 ):
-    """Invite interviewee(s) to a project.
-
-    Accepts either:
-    - Single invite: email (required), name (optional)
-    - CSV upload: file with email (required), name (optional) columns
-    """
+    """Bulk import interviews from CSV and send invitations."""
     # Fetch project
     result = await db.execute(
         select(Project)
@@ -787,74 +780,49 @@ async def invite_submit(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Read and parse CSV
+    content = await csv_file.read()
+    try:
+        csv_text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV file must be UTF-8 encoded")
+
+    valid_rows, parse_errors = parse_interview_csv(csv_text)
+
+    if parse_errors:
+        logger.warning(
+            f"CSV import for project {project_id} had {len(parse_errors)} errors: {parse_errors}"
+        )
+
+    if not valid_rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid rows found in CSV. " + "; ".join(parse_errors[:5]),
+        )
+
     new_interviews: list[Interview] = []
-    errors = []
-
-    # Check if CSV was uploaded
-    if csv_file and csv_file.filename:
-        # Read and parse CSV
-        content = await csv_file.read()
-        try:
-            csv_text = content.decode("utf-8")
-        except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="CSV file must be UTF-8 encoded")
-
-        valid_rows, parse_errors = parse_interview_csv(csv_text)
-        errors.extend(parse_errors)
-
-        # Create interviews from valid rows
-        for row in valid_rows:
-            interview = Interview(
-                project_id=project_id,
-                email=row["email"],
-                name=row["name"],
-            )
-            db.add(interview)
-            new_interviews.append(interview)
-
-        if errors:
-            logger.warning(
-                f"CSV import for project {project_id} had {len(errors)} errors: {errors}"
-            )
-
-    elif email:
-        # Single invite
-        email = email.strip()
-        if not email:
-            raise HTTPException(status_code=400, detail="Email is required")
-
-        # Basic email validation
-        if "@" not in email or "." not in email:
-            raise HTTPException(status_code=400, detail="Invalid email address")
-
-        # Use email prefix as name if not provided
-        interviewee_name = name.strip() if name else email.split("@")[0]
-
+    for row in valid_rows:
         interview = Interview(
             project_id=project_id,
-            email=email,
-            name=interviewee_name,
+            email=row["email"],
+            name=row["name"],
         )
         db.add(interview)
         new_interviews.append(interview)
 
-    else:
-        raise HTTPException(
-            status_code=400, detail="Either email or CSV file is required"
-        )
-
     await db.flush()
 
-    # Send invitation emails to newly created interviews
+    # Send invitation emails
     settings = get_settings()
     for interview_obj in new_interviews:
-        magic_link = f"{settings.base_url}/i/{interview_obj.magic_token}"
-        await send_invitation_email(
-            to=interview_obj.email,
-            guest_name=interview_obj.name,
-            interview_topic=project.topic,
-            magic_link=magic_link,
-        )
+        if interview_obj.email:
+            magic_link = f"{settings.base_url}/i/{interview_obj.magic_token}"
+            await send_invitation_email(
+                to=interview_obj.email,
+                guest_name=interview_obj.name,
+                interview_topic=project.topic,
+                magic_link=magic_link,
+            )
 
     return RedirectResponse(
         url=f"/admin/projects/{project_id}",

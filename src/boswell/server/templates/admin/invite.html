@@ -1,144 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Add Interview - {{ project.topic }} - Boswell{% endblock %}
+{% block title %}Bulk Import - {{ project.name or project.topic }} - Boswell{% endblock %}
 
 {% block head %}
 <style>
-    .page-header {
-        padding-top: 2rem;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-family: var(--font-display);
-        font-size: 2rem;
-        font-weight: 400;
-        color: var(--fg);
-        margin-bottom: 0.25rem;
-    }
-
-    .page-subtitle {
-        color: var(--fg-muted);
-        font-size: 1rem;
-    }
-
-    .form-card {
-        max-width: 600px;
-    }
-
-    .form-section {
-        margin-bottom: 2rem;
-        padding-bottom: 2rem;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .form-section:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-        padding-bottom: 0;
-    }
-
-    .section-title {
-        font-family: var(--font-display);
-        font-size: 1.25rem;
-        font-weight: 500;
-        color: var(--fg);
-        margin-bottom: 1.5rem;
-    }
-
-    .form-group {
-        margin-bottom: 1.5rem;
-    }
-
-    .form-group:last-child {
-        margin-bottom: 0;
-    }
-
-    .form-group label {
-        display: block;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--fg);
-        margin-bottom: 0.5rem;
-    }
-
-    .form-hint {
-        font-size: 0.8125rem;
-        color: var(--fg-dim);
-        margin-top: 0.5rem;
-    }
-
-    .or-divider {
-        display: flex;
-        align-items: center;
-        margin: 2rem 0;
-        color: var(--fg-dim);
-    }
-
-    .or-divider::before,
-    .or-divider::after {
-        content: "";
-        flex: 1;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .or-divider span {
-        padding: 0 1rem;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    .file-upload {
-        border: 2px dashed var(--border);
-        border-radius: var(--radius-md);
-        padding: 1.5rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all var(--transition-fast);
-    }
-
-    .file-upload:hover {
-        border-color: var(--accent);
-        background-color: var(--accent-subtle);
-    }
-
-    .file-upload input[type="file"] {
-        border: none;
-        padding: 0;
-        background: transparent;
-    }
-
-    .csv-example {
-        background-color: var(--bg-surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: 1rem;
-        margin-top: 1rem;
-    }
-
-    .csv-example-title {
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--fg-dim);
-        margin-bottom: 0.75rem;
-    }
-
-    .csv-code {
-        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
-        font-size: 0.8125rem;
-        color: var(--fg-muted);
-        line-height: 1.8;
-    }
-
-    .submit-btn {
-        width: 100%;
-        padding: 1rem 1.5rem;
-        font-size: 1rem;
-        margin-top: 1.5rem;
-    }
+    .page-header { padding-top: 2rem; margin-bottom: 2rem; }
+    .page-title { font-family: var(--font-display); font-size: 2rem; font-weight: 400; color: var(--fg); margin-bottom: 0.25rem; }
+    .page-subtitle { color: var(--fg-dim); font-size: 0.875rem; }
+    .form-card { max-width: 600px; }
+    .form-section { margin-bottom: 2rem; }
+    .form-hint { font-size: 0.8125rem; color: var(--fg-dim); margin-top: 0.5rem; }
+    .file-upload { border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 2rem; text-align: center; cursor: pointer; transition: all var(--transition-fast); }
+    .file-upload:hover { border-color: var(--accent); background-color: var(--accent-subtle); }
 </style>
 {% endblock %}
 
@@ -165,62 +38,30 @@
             </svg>
             Back to Project
         </a>
-        <h1 class="page-title">Add Interviews</h1>
-        <p class="page-subtitle">{{ project.topic }}</p>
+        <h1 class="page-title">Bulk Import Interviews</h1>
+        <p class="page-subtitle">{{ project.name or project.topic }}</p>
     </div>
 
     <div class="card form-card">
-        <!-- Single Invite Form -->
         <div class="form-section">
-            <h3 class="section-title">Add a Single Interview</h3>
-            <form method="post" action="/admin/projects/{{ project.id }}/invite">
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" placeholder="interviewee@example.com">
-                </div>
-
-                <div class="form-group">
-                    <label for="name">Name</label>
-                    <input type="text" id="name" name="name" placeholder="John Doe">
-                    <p class="form-hint">Optional. If not provided, the email prefix will be used.</p>
-                </div>
-
-                <button type="submit" class="btn submit-btn">Add Interview</button>
-            </form>
+            <p style="margin-bottom: 1rem;">Upload a CSV file to import multiple interviews at once. The CSV should have columns:</p>
+            <ul style="margin-left: 1.5rem; margin-bottom: 1rem; color: var(--fg-muted);">
+                <li><strong>email</strong> (required) - Interviewee email address</li>
+                <li><strong>name</strong> (optional) - Interviewee name</li>
+            </ul>
+            <p class="form-hint">For single interviews with personalization, use <a href="/admin/projects/{{ project.id }}/interviews/new">Add Interview</a> instead.</p>
         </div>
 
-        <div class="or-divider">
-            <span>or</span>
-        </div>
-
-        <!-- CSV Upload Form -->
-        <div class="form-section">
-            <h3 class="section-title">Import Multiple Interviews</h3>
-            <form method="post" action="/admin/projects/{{ project.id }}/invite" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="csv_file">CSV File</label>
-                    <div class="file-upload">
-                        <input type="file" id="csv_file" name="csv_file" accept=".csv">
-                    </div>
-                    <p class="form-hint">Upload a CSV file with interviewee information.</p>
+        <form method="post" action="/admin/projects/{{ project.id }}/invite" enctype="multipart/form-data">
+            <div class="form-section">
+                <div class="file-upload">
+                    <span style="display: block; color: var(--fg-muted); margin-bottom: 0.5rem;">Upload CSV File</span>
+                    <input type="file" name="csv_file" accept=".csv" required>
                 </div>
+            </div>
 
-                <div class="csv-example">
-                    <div class="csv-example-title">Required CSV Format</div>
-                    <div class="csv-code">
-                        email,name<br>
-                        person1@example.com,John Doe<br>
-                        person2@example.com,Jane Smith
-                    </div>
-                    <p class="form-hint" style="margin-top: 0.75rem;">
-                        <strong>email</strong> (required): Interviewee's email address<br>
-                        <strong>name</strong> (optional): Interviewee's display name
-                    </p>
-                </div>
-
-                <button type="submit" class="btn submit-btn">Import Interviews</button>
-            </form>
-        </div>
+            <button type="submit" class="btn" style="width: 100%;">Import & Send Invitations</button>
+        </form>
     </div>
 </div>
 {% endblock %}
