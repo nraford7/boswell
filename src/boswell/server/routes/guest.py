@@ -307,8 +307,8 @@ async def interview_room(
             status_code=303,
         )
 
-    # Build room URL (token passed separately for daily-js SDK)
-    room_url = f"https://emirbot.daily.co/{interview.room_name}"
+    # Build room URL with token
+    room_url = f"https://emirbot.daily.co/{interview.room_name}?t={interview.room_token}"
 
     return templates.TemplateResponse(
         request=request,
@@ -317,7 +317,6 @@ async def interview_room(
             "project": interview.project,
             "interview": interview,
             "room_url": room_url,
-            "room_token": interview.room_token,
         },
     )
 

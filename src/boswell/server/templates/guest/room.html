@@ -9,7 +9,7 @@
         padding: 0;
         height: 100%;
         overflow: hidden;
-        background-color: #0a0a0c;
+        background-color: var(--bg-deep);
     }
 
     body::before {
@@ -26,12 +26,11 @@
         flex-direction: column;
     }
 
-    #daily-iframe {
+    .room-iframe {
         flex: 1;
         width: 100%;
-        height: 100%;
         border: none;
-        background-color: #0a0a0c;
+        background-color: #000;
     }
 
     .loading-state {
@@ -44,7 +43,7 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        background-color: #0a0a0c;
+        background-color: var(--bg-deep);
         z-index: 10;
         transition: opacity 0.5s ease;
     }
@@ -57,7 +56,7 @@
     .loading-logo {
         font-family: var(--font-display);
         font-size: 2rem;
-        color: #f5f5f0;
+        color: var(--fg);
         margin-bottom: 2rem;
         letter-spacing: -0.02em;
     }
@@ -65,8 +64,8 @@
     .loading-spinner {
         width: 48px;
         height: 48px;
-        border: 2px solid #333;
-        border-top-color: #d4a855;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }
@@ -79,15 +78,16 @@
 
     .loading-text {
         margin-top: 1.5rem;
-        color: #888;
+        color: var(--fg-dim);
         font-size: 0.9375rem;
     }
 
+    /* Ambient glow behind loading */
     .loading-glow {
         position: absolute;
         width: 400px;
         height: 400px;
-        background: radial-gradient(circle, rgba(212, 168, 85, 0.15) 0%, transparent 70%);
+        background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
         opacity: 0.5;
         pointer-events: none;
     }
@@ -105,25 +105,10 @@
 
     <iframe
         id="daily-iframe"
-        src="{{ room_url }}?t={{ room_token }}"
-        allow="microphone; camera; autoplay; display-capture"
+        class="room-iframe"
+        src="{{ room_url }}"
+        allow="camera; microphone; fullscreen; display-capture; autoplay"
+        onload="document.getElementById('loading').classList.add('hidden')"
     ></iframe>
 </div>
-
-<script>
-    const iframe = document.getElementById('daily-iframe');
-
-    // Hide loading when iframe loads
-    iframe.addEventListener('load', function() {
-        document.getElementById('loading').classList.add('hidden');
-    });
-
-    // Listen for messages from Daily iframe (for leave detection)
-    window.addEventListener('message', function(event) {
-        // Daily sends messages when participant leaves
-        if (event.data && event.data.action === 'left-meeting') {
-            window.location.href = '/i/{{ interview.magic_token }}/thankyou';
-        }
-    });
-</script>
 {% endblock %}
