@@ -84,3 +84,6 @@ outputs/
 *.mp3
 *.m4a
 *.ogg
+
+# Git worktrees
+.worktrees/
