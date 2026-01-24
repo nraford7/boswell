@@ -230,11 +230,13 @@ async def project_new_submit(
             if url.startswith("http://") or url.startswith("https://"):
                 research_links.append(url)
 
-    # Generate questions if we have research
-    if research_summary and INGESTION_AVAILABLE:
+    # Generate questions based on topic (and research if available)
+    if INGESTION_AVAILABLE:
         try:
+            # Use research summary if available, otherwise just use topic
+            research_content = research_summary or ""
             questions_list = await asyncio.to_thread(
-                generate_questions, topic, research_summary, 12
+                generate_questions, topic, research_content, 12
             )
             if questions_list:
                 questions = {
