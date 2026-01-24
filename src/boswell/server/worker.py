@@ -95,11 +95,17 @@ async def start_voice_interview(
             "Is there anything specific you'd like to discuss?",
         ]
 
-    # Build the system prompt
+    # Get guest name and context
+    guest_name = getattr(interview, 'name', None) or "Guest"
+    interview_context = getattr(interview, 'context_notes', None)
+
+    # Build the system prompt with interview context
     system_prompt = build_system_prompt(
         topic=project.topic,
         questions=questions,
         research_summary=project.research_summary,
+        interview_context=interview_context,
+        interviewee_name=guest_name,
         target_minutes=project.target_minutes,
         max_minutes=project.target_minutes + 15,  # Allow 15 min buffer
     )
@@ -108,9 +114,6 @@ async def start_voice_interview(
         f"Starting voice interview {interview.id} "
         f"(room={interview.room_name}, topic='{project.topic}')"
     )
-
-    # Get guest name for transcript
-    guest_name = getattr(interview, 'name', None) or "Guest"
 
     # Run the Pipecat pipeline (blocks until interview ends)
     transcript_entries, conversation_history = await run_interview(
@@ -237,17 +240,25 @@ async def run_interview_task(interview_id: UUID) -> None:
             room_name = interview.room_name
             room_token = interview.room_token
             guest_name = interview.name
+            context_notes = interview.context_notes
 
         # Create a minimal interview object for the voice session
         # (We can't use the SQLAlchemy object outside the session)
         class InterviewData:
-            def __init__(self, id, room_name, room_token, name):
+            def __init__(self, id, room_name, room_token, name, context_notes):
                 self.id = id
                 self.room_name = room_name
                 self.room_token = room_token
                 self.name = name
+                self.context_notes = context_notes
 
-        interview_data = InterviewData(interview_id, room_name, room_token, guest_name)
+        interview_data = InterviewData(
+            interview_id,
+            room_name,
+            room_token,
+            guest_name,
+            context_notes,
+        )
 
         # Run the interview (this blocks until complete)
         transcript_entries, conversation_history = await start_voice_interview(

@@ -5,6 +5,8 @@ def build_system_prompt(
     topic: str,
     questions: list[str],
     research_summary: str | None = None,
+    interview_context: str | None = None,
+    interviewee_name: str | None = None,
     target_minutes: int = 30,
     max_minutes: int = 45,
 ) -> str:
@@ -13,7 +15,9 @@ def build_system_prompt(
     Args:
         topic: Interview topic.
         questions: List of prepared interview questions.
-        research_summary: Optional summary of research materials.
+        research_summary: Optional project-level research summary.
+        interview_context: Optional interview-level context about this specific person.
+        interviewee_name: Name of the person being interviewed.
         target_minutes: Target interview length in minutes.
         max_minutes: Maximum interview length in minutes.
 
@@ -25,8 +29,22 @@ def build_system_prompt(
     research_section = ""
     if research_summary:
         research_section = f"""
-RESEARCH SUMMARY:
+PROJECT RESEARCH:
 {research_summary}
+
+"""
+
+    interview_context_section = ""
+    if interview_context:
+        interview_context_section = f"""
+ABOUT THIS INTERVIEWEE ({interviewee_name or 'Guest'}):
+{interview_context}
+
+PERSONALIZATION INSTRUCTIONS:
+- Use the interviewee's background to make questions more relevant to their experience
+- Reference their role, company, or industry when appropriate
+- Build on any previous interactions or known interests
+- Tailor your language and examples to their context
 
 """
 
@@ -37,7 +55,7 @@ INTERVIEW STYLE:
 - Ask open-ended questions that invite detailed, thoughtful responses
 - Listen actively and follow interesting threads that emerge
 - Be conversational and natural, not robotic or scripted
-- Use the guest's name occasionally if they've shared it
+- Use the guest's name ({interviewee_name or 'Guest'}) occasionally
 
 IMPORTANT - QUESTION FORMAT:
 - Ask ONE question at a time
@@ -51,7 +69,7 @@ IMMEDIATE ACKNOWLEDGMENTS:
 - This shows you're listening and gives you a moment to formulate your next question
 - Then follow with your substantive response or next question
 
-{research_section}PREPARED QUESTIONS (use as a guide, follow the conversation naturally):
+{research_section}{interview_context_section}PREPARED QUESTIONS (use as a guide, personalize based on interviewee context):
 {questions_text}
 
 GUIDELINES:
@@ -89,7 +107,7 @@ RESPONSE FORMAT:
 - Don't use markdown formatting
 - Speak as you would in a real conversation
 
-Remember: The prepared questions are a guide, not a script. Follow interesting threads that emerge naturally. Your goal is to have a genuine, insightful conversation."""
+Remember: The prepared questions are a guide, not a script. Personalize them based on what you know about this specific interviewee. Your goal is to have a genuine, insightful conversation."""
 
 
 GREETING_PROMPT = """The guest has just joined the interview room. Greet them warmly, introduce yourself as Boswell, briefly explain that you'll be conducting an interview on the topic, and ask if they're ready to begin. Keep it friendly and natural - about 2-3 sentences."""

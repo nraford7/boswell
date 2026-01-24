@@ -136,6 +136,8 @@ class InterviewBot:
             questions=self.interview.generated_questions,
             target_minutes=self.interview.target_time_minutes,
             max_minutes=self.interview.max_time_minutes,
+            interview_context=getattr(self.interview, 'context_notes', None),
+            interviewee_name=getattr(self.interview, 'guest_name', None),
         )
 
         # Run the voice pipeline (blocks until interview ends)
@@ -205,6 +207,8 @@ class InterviewBot:
             questions=self.interview.generated_questions,
             target_minutes=self.interview.target_time_minutes,
             max_minutes=self.interview.max_time_minutes,
+            interview_context=getattr(self.interview, 'context_notes', None),
+            interviewee_name=getattr(self.interview, 'guest_name', None),
         )
 
         # Run the voice pipeline with existing conversation history
