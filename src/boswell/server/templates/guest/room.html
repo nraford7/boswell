@@ -3,13 +3,14 @@
 {% block title %}Interview Room - Boswell{% endblock %}
 
 {% block head %}
+<script src="https://unpkg.com/@daily-co/daily-js"></script>
 <style>
     html, body {
         margin: 0;
         padding: 0;
         height: 100%;
         overflow: hidden;
-        background-color: var(--bg-deep);
+        background-color: #0a0a0c;
     }
 
     body::before {
@@ -26,11 +27,16 @@
         flex-direction: column;
     }
 
-    .room-iframe {
+    #daily-container {
         flex: 1;
         width: 100%;
+        background-color: #0a0a0c;
+    }
+
+    #daily-container iframe {
+        width: 100%;
+        height: 100%;
         border: none;
-        background-color: #000;
     }
 
     .loading-state {
@@ -43,7 +49,7 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        background-color: var(--bg-deep);
+        background-color: #0a0a0c;
         z-index: 10;
         transition: opacity 0.5s ease;
     }
@@ -56,7 +62,7 @@
     .loading-logo {
         font-family: var(--font-display);
         font-size: 2rem;
-        color: var(--fg);
+        color: #f5f5f0;
         margin-bottom: 2rem;
         letter-spacing: -0.02em;
     }
@@ -64,8 +70,8 @@
     .loading-spinner {
         width: 48px;
         height: 48px;
-        border: 2px solid var(--border);
-        border-top-color: var(--accent);
+        border: 2px solid #333;
+        border-top-color: #d4a855;
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }
@@ -78,16 +84,15 @@
 
     .loading-text {
         margin-top: 1.5rem;
-        color: var(--fg-dim);
+        color: #888;
         font-size: 0.9375rem;
     }
 
-    /* Ambient glow behind loading */
     .loading-glow {
         position: absolute;
         width: 400px;
         height: 400px;
-        background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(212, 168, 85, 0.15) 0%, transparent 70%);
         opacity: 0.5;
         pointer-events: none;
     }
@@ -103,12 +108,56 @@
         <p class="loading-text">Connecting to interview room...</p>
     </div>
 
-    <iframe
-        id="daily-iframe"
-        class="room-iframe"
-        src="{{ room_url }}"
-        allow="camera; microphone; fullscreen; display-capture; autoplay"
-        onload="document.getElementById('loading').classList.add('hidden')"
-    ></iframe>
+    <div id="daily-container"></div>
 </div>
+
+<script>
+    // Boswell black & gold theme
+    const boswellTheme = {
+        colors: {
+            accent: '#d4a855',
+            accentText: '#0a0a0c',
+            background: '#0a0a0c',
+            backgroundAccent: '#18181c',
+            baseText: '#f5f5f0',
+            border: '#333338',
+            mainAreaBg: '#0a0a0c',
+            mainAreaBgAccent: '#111114',
+            mainAreaText: '#f5f5f0',
+            supportiveText: '#888888'
+        }
+    };
+
+    // Create Daily frame with theme
+    const callFrame = window.DailyIframe.createFrame(
+        document.getElementById('daily-container'),
+        {
+            iframeStyle: {
+                width: '100%',
+                height: '100%',
+                border: 'none'
+            },
+            showLeaveButton: true,
+            showFullscreenButton: true,
+            theme: boswellTheme
+        }
+    );
+
+    // Join the room with token
+    callFrame.join({
+        url: '{{ room_url }}',
+        token: '{{ room_token }}',
+        theme: boswellTheme
+    }).then(() => {
+        document.getElementById('loading').classList.add('hidden');
+    }).catch((error) => {
+        console.error('Failed to join room:', error);
+        document.querySelector('.loading-text').textContent = 'Failed to connect. Please refresh.';
+    });
+
+    // Handle leaving
+    callFrame.on('left-meeting', () => {
+        window.location.href = '/i/{{ interview.magic_token }}/complete';
+    });
+</script>
 {% endblock %}

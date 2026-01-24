@@ -83,6 +83,7 @@ async def create_daily_room(interview_id: str, guest_name: str = "Guest") -> dic
                     "room_name": room_name,
                     "is_owner": False,
                     "user_name": guest_name,
+                    "start_video_off": True,  # Audio-only by default
                 },
             },
         )
@@ -306,8 +307,8 @@ async def interview_room(
             status_code=303,
         )
 
-    # Build room URL with token
-    room_url = f"https://emirbot.daily.co/{interview.room_name}?t={interview.room_token}"
+    # Build room URL (token passed separately for daily-js SDK)
+    room_url = f"https://emirbot.daily.co/{interview.room_name}"
 
     return templates.TemplateResponse(
         request=request,
@@ -316,6 +317,7 @@ async def interview_room(
             "project": interview.project,
             "interview": interview,
             "room_url": room_url,
+            "room_token": interview.room_token,
         },
     )
 
