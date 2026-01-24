@@ -190,8 +190,11 @@
         {% set completed = project.interviews|selectattr('status.value', 'equalto', 'completed')|list|length %}
         {% set pending = total_interviews - completed %}
         <a href="/admin/projects/{{ project.id }}" class="project-card">
-            <div class="project-topic">{{ project.topic }}</div>
+            <div class="project-topic">{{ project.name or project.topic }}</div>
             <div class="project-meta">
+                {% if project.name %}
+                <span style="color: var(--fg-muted);">{{ project.topic[:60] }}{% if project.topic|length > 60 %}...{% endif %}</span> &middot;
+                {% endif %}
                 {{ project.target_minutes }} min &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
             </div>
             <div class="project-stats">
