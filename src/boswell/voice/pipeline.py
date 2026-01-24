@@ -116,6 +116,14 @@ async def create_pipeline(
         context = AnthropicLLMContext(messages=[], system=system_prompt)
     context_aggregator = llm.create_context_aggregator(context)
 
+    # WORKAROUND: Pipecat bug - create_context_aggregator calls from_openai_context()
+    # which doesn't copy the system parameter. Re-set it on the actual context.
+    actual_context = context_aggregator.user().context
+    if initial_messages:
+        actual_context.system = system_msg
+    else:
+        actual_context.system = system_prompt
+
     # Set up transcript collection
     transcript_collector = TranscriptCollector(guest_name=guest_name)
     bot_response_collector = BotResponseCollector(transcript_collector)
@@ -212,7 +220,7 @@ async def create_pipeline(
     # Create runner
     runner = PipelineRunner()
 
-    return task, runner, transcript_collector, context
+    return task, runner, transcript_collector, actual_context
 
 
 async def run_interview(
