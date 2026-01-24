@@ -138,8 +138,7 @@ async def project_new_form(
 async def project_new_submit(
     request: Request,
     user: User = Depends(require_auth),
-    guest_name: str = Form(...),
-    guest_email: str = Form(...),
+    name: str = Form(...),
     topic: str = Form(...),
     template_id: Optional[str] = Form(None),
     target_minutes: int = Form(30),
@@ -147,14 +146,11 @@ async def project_new_submit(
     research_files: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_session),
 ):
-    """Create a new interview with a guest."""
-    # Validate guest info
-    guest_name = guest_name.strip()
-    guest_email = guest_email.strip().lower()
-    if not guest_name:
-        raise HTTPException(status_code=400, detail="Interview name is required")
-    if not guest_email or "@" not in guest_email:
-        raise HTTPException(status_code=400, detail="Valid guest email is required")
+    """Create a new project (without creating an interview)."""
+    # Validate name
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name is required")
 
     # Validate topic
     topic = topic.strip()
@@ -224,6 +220,14 @@ async def project_new_submit(
     # Combine research summary
     research_summary = "\n\n".join(research_parts) if research_parts else None
 
+    # Store URLs in research_links
+    research_links = []
+    if research_urls:
+        urls = [u.strip() for u in research_urls.split("\n") if u.strip()]
+        for url in urls:
+            if url.startswith("http://") or url.startswith("https://"):
+                research_links.append(url)
+
     # Generate questions if we have research
     if research_summary and INGESTION_AVAILABLE:
         try:
@@ -240,39 +244,25 @@ async def project_new_submit(
         except Exception as e:
             logger.warning(f"Failed to generate questions: {e}")
 
-    # Create the project
+    # Create the project (WITHOUT interview)
     project = Project(
         team_id=user.team_id,
         template_id=parsed_template_id,
+        name=name,
         topic=topic,
         target_minutes=target_minutes,
         created_by=user.id,
         research_summary=research_summary,
+        research_links=research_links if research_links else None,
         questions=questions,
     )
     db.add(project)
     await db.flush()
 
-    # Create the interview (without sending email)
-    interview = Interview(
-        project_id=project.id,
-        email=guest_email,
-        name=guest_name,
-    )
-    db.add(interview)
-    await db.flush()
-
-    # Show the interview created confirmation page
-    settings = get_settings()
-    return templates.TemplateResponse(
-        request=request,
-        name="admin/project_created.html",
-        context={
-            "user": user,
-            "project": project,
-            "interview": interview,
-            "base_url": settings.base_url,
-        },
+    # Redirect to project detail page
+    return RedirectResponse(
+        url=f"/admin/projects/{project.id}",
+        status_code=303,
     )
 
 

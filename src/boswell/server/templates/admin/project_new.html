@@ -129,29 +129,19 @@
 
         <form method="post" action="/admin/projects/new" enctype="multipart/form-data">
             <div class="form-section">
-                <h3 class="form-section-title">Interviewee Information</h3>
-                <p class="form-section-desc">Who will be interviewed?</p>
-
-                <div class="form-group">
-                    <label for="guest_name">Name <span class="required">*</span></label>
-                    <input type="text" id="guest_name" name="guest_name" required placeholder="John Smith">
-                </div>
-
-                <div class="form-group">
-                    <label for="guest_email">Email <span class="required">*</span></label>
-                    <input type="email" id="guest_email" name="guest_email" required placeholder="john@example.com">
-                </div>
-            </div>
-
-            <hr class="form-divider">
-
-            <div class="form-section">
                 <h3 class="form-section-title">Project Details</h3>
-                <p class="form-section-desc">What is this project about?</p>
+                <p class="form-section-desc">Define your research project.</p>
 
                 <div class="form-group">
-                    <label for="topic">Topic <span class="required">*</span></label>
-                    <textarea id="topic" name="topic" required rows="3" placeholder="Describe the purpose and intent of this interview. What do you want to learn? What areas should be explored?"></textarea>
+                    <label for="name">Project Name <span class="required">*</span></label>
+                    <input type="text" id="name" name="name" required placeholder="Q1 Customer Research">
+                    <p class="form-hint">A short, memorable name for this project.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="topic">Research Topic / Intent <span class="required">*</span></label>
+                    <textarea id="topic" name="topic" required rows="3" placeholder="Understanding customer pain points with onboarding and identifying opportunities for improvement."></textarea>
+                    <p class="form-hint">Describe the purpose and goals of this research.</p>
                 </div>
 
                 <div class="form-group">
@@ -176,7 +166,7 @@
 
             <div class="form-section">
                 <h3 class="form-section-title">Research Materials</h3>
-                <p class="form-section-desc">Optional: Give Boswell background information about the topic or guest.</p>
+                <p class="form-section-desc">Optional: Give Boswell background information about the research topic.</p>
 
                 <div class="form-group">
                     <label for="research_files">Upload Documents</label>
