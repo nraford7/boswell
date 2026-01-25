@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.main import templates
-from boswell.server.models import Interview, InterviewStatus, Project
+from boswell.server.models import Interview, InterviewStatus, Project, Transcript
 
 logger = logging.getLogger(__name__)
 
@@ -237,14 +237,22 @@ async def start_interview(
             status_code=404,
         )
 
-    # Already completed - redirect to thank you page
-    if interview.status == InterviewStatus.completed:
-        return RedirectResponse(
-            url=f"/i/{magic_token}/thankyou",
-            status_code=303,
-        )
+    # Check if this is a returning guest (completed interview)
+    is_returning = interview.status == InterviewStatus.completed
+    has_transcript = False
 
-    # Already started - redirect to room
+    if is_returning:
+        # Fetch existing transcript for context
+        transcript_result = await db.execute(
+            select(Transcript).where(Transcript.interview_id == interview.id)
+        )
+        existing_transcript = transcript_result.scalar_one_or_none()
+        has_transcript = existing_transcript is not None
+
+        # Increment session count
+        interview.session_count = (interview.session_count or 1) + 1
+
+    # Already started with active room - redirect to room
     if interview.status == InterviewStatus.started and interview.room_name:
         return RedirectResponse(
             url=f"/i/{magic_token}/room",
@@ -259,6 +267,12 @@ async def start_interview(
     interview.room_name = room_info["room_name"]
     interview.room_token = room_info["room_token"]
     interview.started_at = now
+    interview.interview_mode = None  # Will be set by bot via app message
+
+    # Store returning flag in a way the worker can access
+    # We'll use interview_mode = "pending" to indicate bot should ask
+    if is_returning and has_transcript:
+        interview.interview_mode = "pending"  # Bot will update this
 
     await db.commit()
 
