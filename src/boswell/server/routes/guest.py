@@ -149,12 +149,30 @@ async def interview_landing(
             status_code=404,
         )
 
-    # Completed - redirect to thank you page
+    # Completed - for named guests, show landing page with "Start or Resume" option
+    # For generic link guests, redirect to thank you page
     if interview.status == InterviewStatus.completed:
-        return RedirectResponse(
-            url=f"/i/{magic_token}/thankyou",
-            status_code=303,
-        )
+        # Check if this is a named guest (has email or was created via admin)
+        # Generic link guests have no email and were created on-the-fly
+        is_named_guest = interview.email is not None or interview.claimed_by is not None
+
+        if is_named_guest:
+            # Show landing page with option to resume
+            return templates.TemplateResponse(
+                request=request,
+                name="guest/landing.html",
+                context={
+                    "project": interview.project,
+                    "interview": interview,
+                    "is_returning": True,
+                },
+            )
+        else:
+            # Generic link guests go to thank you
+            return RedirectResponse(
+                url=f"/i/{magic_token}/thankyou",
+                status_code=303,
+            )
 
     # Started with room - show rejoin page
     if interview.status == InterviewStatus.started and interview.room_name:
