@@ -366,7 +366,6 @@
                     {{ project.topic[:100] }}{% if project.topic|length > 100 %}...{% endif %} &middot;
                     {% endif %}
                     {{ project.target_minutes }} min target
-                    {% if project.template %} &middot; {{ project.template.name }}{% endif %}
                     &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
                 </p>
             </div>
