@@ -16,14 +16,12 @@
     .form-divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
     input[type="number"] { max-width: 140px; }
     .submit-btn { width: 100%; padding: 1rem 1.5rem; font-size: 1rem; }
-    .angle-option { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: background-color var(--transition-fast); }
-    .angle-option:hover { background-color: var(--bg-subtle); }
-    .angle-option input[type="radio"] { margin-top: 0.25rem; }
-    .angle-option-content { flex: 1; }
-    .angle-option-label { font-weight: 500; color: var(--fg); }
-    .angle-option-desc { font-size: 0.8125rem; color: var(--fg-dim); margin-top: 0.25rem; }
     .custom-angle-input { margin-top: 1rem; display: none; }
     .custom-angle-input.visible { display: block; }
+    .file-upload { border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 1.5rem; text-align: center; cursor: pointer; transition: all var(--transition-fast); }
+    .file-upload:hover { border-color: var(--accent); background-color: var(--accent-subtle); }
+    .file-upload input[type="file"] { border: none; padding: 0; background: transparent; }
+    .file-upload-label { display: block; color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
 </style>
 {% endblock %}
 
@@ -55,7 +53,7 @@
     <div class="card form-card">
         <h1 style="font-family: var(--font-display); font-size: 2rem; font-weight: 400; margin-bottom: 2rem;">{% if mode == 'edit' %}Edit Interview Type{% else %}New Interview Type{% endif %}</h1>
 
-        <form method="post" action="{% if mode == 'edit' %}/admin/templates/{{ template.id }}/edit{% else %}/admin/templates/new{% endif %}">
+        <form method="post" action="{% if mode == 'edit' %}/admin/templates/{{ template.id }}/edit{% else %}/admin/templates/new{% endif %}" enctype="multipart/form-data">
             <div class="form-section">
                 <h3 class="form-section-title">Template Info</h3>
 
@@ -95,6 +93,15 @@
 {% endif %}{% endfor %}{% endif %}</textarea>
                     <p class="form-hint">URLs to scrape for background context.</p>
                 </div>
+
+                <div class="form-group">
+                    <label for="research_files">Upload Documents</label>
+                    <div class="file-upload">
+                        <span class="file-upload-label">PDFs, text files, markdown</span>
+                        <input type="file" id="research_files" name="research_files" multiple accept=".pdf,.txt,.md,.doc,.docx">
+                    </div>
+                    <p class="form-hint">Briefings, research notes, background documents.</p>
+                </div>
             </div>
 
             <hr class="form-divider">
@@ -104,55 +111,15 @@
                 <p class="form-section-desc">How should Boswell approach interviews using this template?</p>
 
                 <div class="form-group">
-                    <label>Approach <span class="required">*</span></label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="exploratory" {% if not template or not template.angle or template.angle.value == 'exploratory' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Exploratory</div>
-                            <div class="angle-option-desc">Learn from the guest about a topic. Probe deeper, follow tangents, surface their knowledge.</div>
-                        </div>
-                    </label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="interrogative" {% if template and template.angle and template.angle.value == 'interrogative' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Interrogative</div>
-                            <div class="angle-option-desc">Challenge claims and reasoning. Ask for evidence, surface weaknesses, stress-test ideas.</div>
-                        </div>
-                    </label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="imaginative" {% if template and template.angle and template.angle.value == 'imaginative' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Imaginative</div>
-                            <div class="angle-option-desc">Creative collaboration. Build on ideas, explore "what if" scenarios, develop thinking.</div>
-                        </div>
-                    </label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="documentary" {% if template and template.angle and template.angle.value == 'documentary' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Documentary</div>
-                            <div class="angle-option-desc">Capture the guest's story. Let them lead, minimal steering, preserve their voice.</div>
-                        </div>
-                    </label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="coaching" {% if template and template.angle and template.angle.value == 'coaching' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Coaching</div>
-                            <div class="angle-option-desc">Help guests think through something. Reflect back, Socratic questioning, facilitate insight.</div>
-                        </div>
-                    </label>
-
-                    <label class="angle-option">
-                        <input type="radio" name="angle" value="custom" {% if template and template.angle and template.angle.value == 'custom' %}checked{% endif %} onchange="toggleCustomAngle()">
-                        <div class="angle-option-content">
-                            <div class="angle-option-label">Custom</div>
-                            <div class="angle-option-desc">Define your own approach with a custom prompt.</div>
-                        </div>
-                    </label>
+                    <label for="angle">Approach <span class="required">*</span></label>
+                    <select id="angle" name="angle" onchange="toggleCustomAngle()">
+                        <option value="exploratory" {% if not template or not template.angle or template.angle.value == 'exploratory' %}selected{% endif %}>Exploratory - learn from guest, probe deeper</option>
+                        <option value="interrogative" {% if template and template.angle and template.angle.value == 'interrogative' %}selected{% endif %}>Interrogative - challenge claims, stress-test</option>
+                        <option value="imaginative" {% if template and template.angle and template.angle.value == 'imaginative' %}selected{% endif %}>Imaginative - creative collaboration, "what if"</option>
+                        <option value="documentary" {% if template and template.angle and template.angle.value == 'documentary' %}selected{% endif %}>Documentary - capture story, let them lead</option>
+                        <option value="coaching" {% if template and template.angle and template.angle.value == 'coaching' %}selected{% endif %}>Coaching - facilitate insight, Socratic</option>
+                        <option value="custom" {% if template and template.angle and template.angle.value == 'custom' %}selected{% endif %}>Custom</option>
+                    </select>
 
                     <div id="custom-angle-input" class="custom-angle-input {% if template and template.angle and template.angle.value == 'custom' %}visible{% endif %}">
                         <textarea id="angle_custom" name="angle_custom" rows="4" placeholder="Describe how Boswell should approach these interviews...">{% if template and template.angle_custom %}{{ template.angle_custom }}{% endif %}</textarea>
@@ -181,8 +148,8 @@
 <script>
 function toggleCustomAngle() {
     const customInput = document.getElementById('custom-angle-input');
-    const customRadio = document.querySelector('input[name="angle"][value="custom"]');
-    if (customRadio.checked) {
+    const angleSelect = document.getElementById('angle');
+    if (angleSelect.value === 'custom') {
         customInput.classList.add('visible');
     } else {
         customInput.classList.remove('visible');

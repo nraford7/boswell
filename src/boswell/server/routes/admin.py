@@ -628,6 +628,7 @@ async def template_new_submit(
     default_minutes: int = Form(30),
     questions_text: Optional[str] = Form(None),
     research_urls: Optional[str] = Form(None),
+    research_files: list[UploadFile] = File(default=[]),
     angle: str = Form("exploratory"),
     angle_secondary: Optional[str] = Form(None),
     angle_custom: Optional[str] = Form(None),
@@ -655,12 +656,44 @@ async def template_new_submit(
         if questions_list:
             questions = {"questions": [{"text": q} for q in questions_list]}
 
-    # Parse research URLs
+    # Parse research URLs and process files
     research_links = None
+    research_summary_parts = []
+
     if research_urls and research_urls.strip():
         urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
         if urls:
             research_links = urls
+            # Fetch URL content if ingestion is available
+            if INGESTION_AVAILABLE:
+                for url in urls:
+                    try:
+                        url_content = await asyncio.to_thread(fetch_url, url)
+                        if url_content:
+                            research_summary_parts.append(f"=== URL: {url} ===\n{url_content}")
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch URL {url}: {e}")
+
+    # Process uploaded files
+    if research_files and INGESTION_AVAILABLE:
+        for upload_file in research_files:
+            if upload_file.filename and upload_file.size and upload_file.size > 0:
+                try:
+                    suffix = Path(upload_file.filename).suffix
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        content = await upload_file.read()
+                        tmp.write(content)
+                        tmp_path = tmp.name
+
+                    doc_content = await asyncio.to_thread(read_document, Path(tmp_path))
+                    if doc_content:
+                        research_summary_parts.append(f"=== Document: {upload_file.filename} ===\n{doc_content}")
+
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Failed to process file {upload_file.filename}: {e}")
+
+    research_summary = "\n\n".join(research_summary_parts) if research_summary_parts else None
 
     # Parse angle
     try:
@@ -686,6 +719,7 @@ async def template_new_submit(
         description=description,
         default_minutes=default_minutes,
         questions=questions,
+        research_summary=research_summary,
         research_links=research_links,
         angle=angle_enum,
         angle_secondary=angle_secondary_enum,
@@ -736,6 +770,7 @@ async def template_edit_submit(
     default_minutes: int = Form(30),
     questions_text: Optional[str] = Form(None),
     research_urls: Optional[str] = Form(None),
+    research_files: list[UploadFile] = File(default=[]),
     angle: str = Form("exploratory"),
     angle_secondary: Optional[str] = Form(None),
     angle_custom: Optional[str] = Form(None),
@@ -773,12 +808,48 @@ async def template_edit_submit(
         if questions_list:
             questions = {"questions": [{"text": q} for q in questions_list]}
 
-    # Parse research URLs
+    # Parse research URLs and process files
     research_links = None
+    research_summary_parts = []
+
+    # Keep existing research summary if no new files/urls provided
+    if template.research_summary:
+        research_summary_parts.append(template.research_summary)
+
     if research_urls and research_urls.strip():
         urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
         if urls:
             research_links = urls
+            # Fetch URL content if ingestion is available
+            if INGESTION_AVAILABLE:
+                for url in urls:
+                    try:
+                        url_content = await asyncio.to_thread(fetch_url, url)
+                        if url_content:
+                            research_summary_parts.append(f"=== URL: {url} ===\n{url_content}")
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch URL {url}: {e}")
+
+    # Process uploaded files
+    if research_files and INGESTION_AVAILABLE:
+        for upload_file in research_files:
+            if upload_file.filename and upload_file.size and upload_file.size > 0:
+                try:
+                    suffix = Path(upload_file.filename).suffix
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        content = await upload_file.read()
+                        tmp.write(content)
+                        tmp_path = tmp.name
+
+                    doc_content = await asyncio.to_thread(read_document, Path(tmp_path))
+                    if doc_content:
+                        research_summary_parts.append(f"=== Document: {upload_file.filename} ===\n{doc_content}")
+
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Failed to process file {upload_file.filename}: {e}")
+
+    research_summary = "\n\n".join(research_summary_parts) if research_summary_parts else None
 
     # Parse angle
     try:
@@ -802,6 +873,7 @@ async def template_edit_submit(
     template.description = description
     template.default_minutes = default_minutes
     template.questions = questions
+    template.research_summary = research_summary
     template.research_links = research_links
     template.angle = angle_enum
     template.angle_secondary = angle_secondary_enum
