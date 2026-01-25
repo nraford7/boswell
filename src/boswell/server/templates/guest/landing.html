@@ -233,12 +233,25 @@
             </ul>
         </div>
 
+        {% if is_returning %}
+        <div class="info-section" style="background: var(--accent-subtle); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+            <p style="color: var(--accent); font-size: 0.875rem; margin: 0;">
+                <strong>Welcome back!</strong> You've completed this interview before.
+                Boswell will ask if you'd like to continue, add detail to your previous answers, or start fresh.
+            </p>
+        </div>
+        {% endif %}
+
         <form method="post" action="/i/{{ interview.magic_token }}/start" class="start-form">
             <p style="text-align: center; font-size: 0.8125rem; color: var(--fg-dim); margin-bottom: 1rem;">
                 Starting this interview indicates your agreement to these terms.
             </p>
             <button type="submit" class="btn">
+                {% if is_returning %}
+                Start or Resume Interview
+                {% else %}
                 Start Interview
+                {% endif %}
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
