@@ -23,13 +23,6 @@
     .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
     .submit-btn { padding: 1rem 1.5rem; font-size: 1rem; }
 
-    /* Custom content section */
-    .custom-content { display: none; margin-top: 1.5rem; padding: 1.5rem; background: var(--bg-subtle); border-radius: var(--radius-md); }
-    .custom-content.visible { display: block; }
-    .custom-subsection { margin-bottom: 1.5rem; }
-    .custom-subsection:last-child { margin-bottom: 0; }
-    .custom-subsection-title { font-size: 0.875rem; font-weight: 500; color: var(--fg); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
-
     .save-template-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
     .save-template-row input[type="text"] { flex: 1; }
     .save-template-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer; white-space: nowrap; }
@@ -85,7 +78,7 @@
 
             <div class="form-section">
                 <h3 class="form-section-title">Interview Type</h3>
-                <p class="form-section-desc">{% if templates %}Choose a template or customize.{% else %}Configure the interview style. <a href="/admin/templates/new" style="color: var(--accent);">Create a template</a> to reuse configurations.{% endif %}</p>
+                <p class="form-section-desc">{% if templates %}Choose a template or customize.{% else %}<a href="/admin/templates/new" style="color: var(--accent);">Create a template</a> to reuse interview configurations.{% endif %}</p>
 
                 <div class="form-group">
                     <label for="template_id">Template</label>
@@ -100,80 +93,77 @@
                         {% endif %}
                     </select>
                 </div>
+            </div>
 
-                <div id="custom-content" class="custom-content{% if not templates %} visible{% endif %}">
-                    <div class="custom-subsection">
-                        <div class="custom-subsection-title">Content</div>
+            <hr class="form-divider">
 
-                        <div class="form-group">
-                            <label for="questions_text">Questions</label>
-                            <textarea id="questions_text" name="questions_text" rows="4" placeholder="What drew you to this field?&#10;Can you describe a typical day?&#10;(one question per line)"></textarea>
-                        </div>
+            <div class="form-section">
+                <h3 class="form-section-title">Interview Topic</h3>
+                <p class="form-section-desc">What should Boswell explore in this conversation?</p>
 
-                        <div class="form-group">
-                            <label for="research_urls">Research Links</label>
-                            <textarea id="research_urls" name="research_urls" rows="2" placeholder="https://example.com/background&#10;(one URL per line)"></textarea>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label for="questions_text">Questions</label>
+                    <textarea id="questions_text" name="questions_text" rows="4" placeholder="What drew you to this field?&#10;Can you describe a typical day?&#10;(one question per line)"></textarea>
+                    <p class="form-hint">Conversation starters, one per line. Boswell will adapt based on the conversation.</p>
+                </div>
+            </div>
 
-                    <div class="custom-subsection">
-                        <div class="custom-subsection-title">Style</div>
+            <div id="custom-style" class="form-section{% if templates %}" style="display: none;"{% else %}"{% endif %}>
+                <h3 class="form-section-title">Interview Style</h3>
+                <p class="form-section-desc">How should Boswell approach this conversation?</p>
 
-                        <div class="form-group">
-                            <label for="angle">Approach</label>
-                            <select name="angle" id="angle-select" onchange="toggleCustomAngle()">
-                                <option value="exploratory">Exploratory - learning from guest</option>
-                                <option value="interrogative">Interrogative - testing claims</option>
-                                <option value="imaginative">Imaginative - building ideas</option>
-                                <option value="documentary">Documentary - capturing story</option>
-                                <option value="coaching">Coaching - facilitating insight</option>
-                                <option value="custom">Custom</option>
-                            </select>
-                        </div>
+                <div class="form-group">
+                    <label for="angle">Approach</label>
+                    <select name="angle" id="angle-select" onchange="toggleCustomAngle()">
+                        <option value="exploratory">Exploratory - learning from guest</option>
+                        <option value="interrogative">Interrogative - testing claims</option>
+                        <option value="imaginative">Imaginative - building ideas</option>
+                        <option value="documentary">Documentary - capturing story</option>
+                        <option value="coaching">Coaching - facilitating insight</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
 
-                        <div class="form-group" id="custom-angle-group" style="display: none;">
-                            <label for="angle_custom">Custom Approach</label>
-                            <textarea id="angle_custom" name="angle_custom" rows="3" placeholder="Describe how Boswell should approach this interview..."></textarea>
-                        </div>
+                <div class="form-group" id="custom-angle-group" style="display: none;">
+                    <label for="angle_custom">Custom Approach</label>
+                    <textarea id="angle_custom" name="angle_custom" rows="3" placeholder="Describe how Boswell should approach this interview..."></textarea>
+                </div>
 
-                        <div class="form-group">
-                            <label for="angle_secondary">Blend with</label>
-                            <select name="angle_secondary" id="angle-secondary-select">
-                                <option value="">None</option>
-                                <option value="exploratory">Exploratory</option>
-                                <option value="interrogative">Interrogative</option>
-                                <option value="imaginative">Imaginative</option>
-                                <option value="documentary">Documentary</option>
-                                <option value="coaching">Coaching</option>
-                            </select>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label for="angle_secondary">Blend with</label>
+                    <select name="angle_secondary" id="angle-secondary-select">
+                        <option value="">None</option>
+                        <option value="exploratory">Exploratory</option>
+                        <option value="interrogative">Interrogative</option>
+                        <option value="imaginative">Imaginative</option>
+                        <option value="documentary">Documentary</option>
+                        <option value="coaching">Coaching</option>
+                    </select>
+                </div>
 
-                    <div class="save-template-row">
-                        <label>
-                            <input type="checkbox" name="save_as_template" id="save-as-template" onchange="toggleTemplateName()">
-                            Save as template for reuse
-                        </label>
-                        <input type="text" name="new_template_name" id="new-template-name" placeholder="Template name" style="display: none;">
-                    </div>
+                <div class="save-template-row">
+                    <label>
+                        <input type="checkbox" name="save_as_template" id="save-as-template" onchange="toggleTemplateName()">
+                        Save as template for reuse
+                    </label>
+                    <input type="text" name="new_template_name" id="new-template-name" placeholder="Template name" style="display: none;">
                 </div>
             </div>
 
             <hr class="form-divider">
 
             <div class="form-section">
-                <h3 class="form-section-title">Background on This Person</h3>
-                <p class="form-section-desc">Optional: Give Boswell context about this specific interviewee.</p>
+                <h3 class="form-section-title">Background on Interviewee</h3>
+                <p class="form-section-desc">Optional context about this specific person.</p>
 
                 <div class="form-group">
                     <label for="context_notes">Notes</label>
-                    <textarea id="context_notes" name="context_notes" rows="4" placeholder="VP of Operations at WidgetCorp, manufacturing industry. Been a customer for 2 years."></textarea>
-                    <p class="form-hint">Background, role, company, previous interactions.</p>
+                    <textarea id="context_notes" name="context_notes" rows="3" placeholder="VP of Operations at WidgetCorp. Been a customer for 2 years. Interested in automation."></textarea>
                 </div>
 
                 <div class="form-group">
                     <label for="context_urls">Links</label>
-                    <textarea id="context_urls" name="context_urls" rows="2" placeholder="https://linkedin.com/in/stevejohnson&#10;(one URL per line)"></textarea>
+                    <textarea id="context_urls" name="context_urls" rows="2" placeholder="https://linkedin.com/in/name&#10;https://company.com/about&#10;(one URL per line)"></textarea>
                 </div>
 
                 <div class="form-group">
@@ -196,12 +186,12 @@
 <script>
 function handleTemplateChange() {
     const templateSelect = document.getElementById('template-select');
-    const customContent = document.getElementById('custom-content');
+    const styleSection = document.getElementById('custom-style');
 
     if (templateSelect.value === '') {
-        customContent.classList.add('visible');
+        styleSection.style.display = 'block';
     } else {
-        customContent.classList.remove('visible');
+        styleSection.style.display = 'none';
     }
 }
 

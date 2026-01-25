@@ -473,33 +473,28 @@ async def interview_new_submit(
 
     combined_context = "\n\n".join(context_parts) if context_parts else None
 
-    # Determine if using template or "Other"
+    # Parse template selection
     parsed_template_id = None
-    interview_questions = None
-    interview_research_summary = None
-    interview_research_links = None
-    interview_angle = None
-    interview_angle_secondary = None
-    interview_angle_custom = None
-
     if template_id and template_id.strip():
-        # Using a template
         try:
             parsed_template_id = UUID(template_id)
         except ValueError:
             pass
-    else:
-        # "Other" - parse custom content and style
-        if questions_text and questions_text.strip():
-            questions_list = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
-            if questions_list:
-                interview_questions = {"questions": [{"text": q} for q in questions_list]}
 
-        if research_urls and research_urls.strip():
-            urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
-            if urls:
-                interview_research_links = urls
+    # Parse questions (always available, overrides template if provided)
+    interview_questions = None
+    if questions_text and questions_text.strip():
+        questions_list = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
+        if questions_list:
+            interview_questions = {"questions": [{"text": q} for q in questions_list]}
 
+    # Parse style (only for Custom template)
+    interview_angle = None
+    interview_angle_secondary = None
+    interview_angle_custom = None
+
+    if not parsed_template_id:
+        # Custom - parse style settings
         if angle and angle.strip():
             try:
                 interview_angle = InterviewAngle(angle)
@@ -521,7 +516,6 @@ async def interview_new_submit(
                 team_id=user.team_id,
                 name=new_template_name.strip(),
                 questions=interview_questions,
-                research_links=interview_research_links,
                 angle=interview_angle or InterviewAngle.exploratory,
                 angle_secondary=interview_angle_secondary,
                 angle_custom=interview_angle_custom,
@@ -533,7 +527,6 @@ async def interview_new_submit(
             parsed_template_id = new_template.id
             # Clear interview-level overrides since template now has them
             interview_questions = None
-            interview_research_links = None
             interview_angle = None
             interview_angle_secondary = None
             interview_angle_custom = None
@@ -545,7 +538,6 @@ async def interview_new_submit(
         email=email,
         template_id=parsed_template_id,
         questions=interview_questions,
-        research_links=interview_research_links,
         angle=interview_angle,
         angle_secondary=interview_angle_secondary,
         angle_custom=interview_angle_custom,
