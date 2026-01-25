@@ -305,6 +305,22 @@ async def run_interview_task(interview_id: UUID) -> None:
             room_token = interview.room_token
             guest_name = interview.name
             context_notes = interview.context_notes
+            interview_mode = interview.interview_mode
+
+            # Check if this is a returning guest
+            is_returning = interview_mode == "pending"
+            previous_transcript = None
+            previous_context = None
+
+            if is_returning:
+                # Fetch existing transcript
+                transcript_result = await db.execute(
+                    select(Transcript).where(Transcript.interview_id == interview.id)
+                )
+                existing_transcript = transcript_result.scalar_one_or_none()
+                if existing_transcript:
+                    previous_transcript = existing_transcript.entries or []
+                    previous_context = existing_transcript.conversation_context or []
 
         # Create a minimal interview object for the voice session
         # (We can't use the SQLAlchemy object outside the session)
@@ -326,7 +342,11 @@ async def run_interview_task(interview_id: UUID) -> None:
 
         # Run the interview (this blocks until complete)
         transcript_entries, conversation_history, detected_mode = await start_voice_interview(
-            interview_data, project
+            interview_data,
+            project,
+            is_returning=is_returning,
+            previous_transcript=previous_transcript,
+            previous_context=previous_context,
         )
 
         # Save results in a new session
