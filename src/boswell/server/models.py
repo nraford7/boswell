@@ -35,6 +35,17 @@ class InterviewMode(str, enum.Enum):
     fresh_start = "fresh_start"  # Delete old transcript, start over
 
 
+class InterviewAngle(str, enum.Enum):
+    """Style/angle for conducting an interview."""
+
+    exploratory = "exploratory"
+    interrogative = "interrogative"
+    imaginative = "imaginative"
+    documentary = "documentary"
+    coaching = "coaching"
+    custom = "custom"
+
+
 class JobStatus(str, enum.Enum):
     """Status of a background job."""
 
@@ -103,6 +114,16 @@ class InterviewTemplate(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     prompt_modifier: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    angle: Mapped[Optional[InterviewAngle]] = mapped_column(
+        Enum(InterviewAngle, name="interviewangle"), nullable=True
+    )
+    angle_secondary: Mapped[Optional[InterviewAngle]] = mapped_column(
+        Enum(InterviewAngle, name="interviewangle", create_constraint=False), nullable=True
+    )
+    angle_custom: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     default_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -110,8 +131,8 @@ class InterviewTemplate(Base):
 
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="templates")
-    projects: Mapped[list["Project"]] = relationship(
-        "Project", back_populates="template"
+    interviews: Mapped[list["Interview"]] = relationship(
+        "Interview", back_populates="template"
     )
 
 
@@ -123,9 +144,6 @@ class Project(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     team_id: Mapped[UUID] = mapped_column(
         ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
-    )
-    template_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("interview_templates.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     topic: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -151,9 +169,6 @@ class Project(Base):
 
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="projects")
-    template: Mapped[Optional["InterviewTemplate"]] = relationship(
-        "InterviewTemplate", back_populates="projects"
-    )
     interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="project", cascade="all, delete-orphan"
     )
@@ -174,6 +189,19 @@ class Interview(Base):
     bio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     context_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     context_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    template_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("interview_templates.id", ondelete="SET NULL"), nullable=True
+    )
+    questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    angle: Mapped[Optional[InterviewAngle]] = mapped_column(
+        Enum(InterviewAngle, name="interviewangle", create_constraint=False), nullable=True
+    )
+    angle_secondary: Mapped[Optional[InterviewAngle]] = mapped_column(
+        Enum(InterviewAngle, name="interviewangle", create_constraint=False), nullable=True
+    )
+    angle_custom: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     magic_token: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, default=generate_magic_token
     )
@@ -203,6 +231,9 @@ class Interview(Base):
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="interviews")
+    template: Mapped[Optional["InterviewTemplate"]] = relationship(
+        "InterviewTemplate", back_populates="interviews"
+    )
     transcript: Mapped[Optional["Transcript"]] = relationship(
         "Transcript", back_populates="interview", uselist=False, cascade="all, delete-orphan"
     )

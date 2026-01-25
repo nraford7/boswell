@@ -228,17 +228,6 @@
             </div>
 
             <div class="form-group">
-                <label for="template_id">Default Interview Type</label>
-                <select id="template_id" name="template_id">
-                    <option value="">No interview type</option>
-                    {% for template in templates %}
-                    <option value="{{ template.id }}">{{ template.name }}</option>
-                    {% endfor %}
-                </select>
-                <p class="form-hint">Optional. Interview type to use for newly created projects.</p>
-            </div>
-
-            <div class="form-group">
                 <div class="column-reference">
                     <div class="column-reference-header">CSV Column Reference</div>
                     <table class="column-table">

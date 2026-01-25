@@ -7,7 +7,7 @@
     .page-header { padding-top: 2rem; margin-bottom: 2rem; }
     .page-title { font-family: var(--font-display); font-size: 2rem; font-weight: 400; color: var(--fg); margin-bottom: 0.25rem; }
     .page-subtitle { color: var(--fg-dim); font-size: 0.875rem; }
-    .form-card { max-width: 680px; }
+    .form-card { max-width: 720px; }
     .form-section { margin-bottom: 2rem; }
     .form-section-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; color: var(--fg); margin-bottom: 0.5rem; }
     .form-section-desc { color: var(--fg-dim); font-size: 0.875rem; margin-bottom: 1.5rem; }
@@ -22,6 +22,33 @@
     .file-upload-label { display: block; color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
     .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
     .submit-btn { padding: 1rem 1.5rem; font-size: 1rem; }
+
+    /* Template selection styles */
+    .template-option { display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 0.75rem; cursor: pointer; transition: all var(--transition-fast); }
+    .template-option:hover { border-color: var(--accent); background-color: var(--bg-subtle); }
+    .template-option.selected { border-color: var(--accent); background-color: var(--accent-subtle); }
+    .template-option input[type="radio"] { margin-top: 0.25rem; }
+    .template-option-content { flex: 1; }
+    .template-option-name { font-weight: 500; color: var(--fg); }
+    .template-option-meta { font-size: 0.8125rem; color: var(--fg-dim); margin-top: 0.25rem; }
+    .template-option-desc { font-size: 0.8125rem; color: var(--fg-muted); margin-top: 0.25rem; }
+    .template-divider { border: none; border-top: 1px dashed var(--border); margin: 1rem 0; }
+
+    /* Other option expanded content */
+    .other-content { display: none; margin-top: 1rem; padding: 1.5rem; background: var(--bg-subtle); border-radius: var(--radius-md); }
+    .other-content.visible { display: block; }
+    .other-subsection { margin-bottom: 1.5rem; }
+    .other-subsection:last-child { margin-bottom: 0; }
+    .other-subsection-title { font-size: 0.875rem; font-weight: 500; color: var(--fg); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Angle options within Other */
+    .angle-option { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem; cursor: pointer; }
+    .angle-option-label { font-weight: 500; font-size: 0.875rem; }
+    .angle-option-desc { font-size: 0.75rem; color: var(--fg-dim); }
+
+    .save-template-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .save-template-row input[type="text"] { flex: 1; }
+    .save-template-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer; white-space: nowrap; }
 </style>
 {% endblock %}
 
@@ -73,19 +100,111 @@
             <hr class="form-divider">
 
             <div class="form-section">
+                <h3 class="form-section-title">Interview Type</h3>
+                <p class="form-section-desc">Choose a template or create a custom interview.</p>
+
+                {% for t in templates %}
+                <label class="template-option" onclick="selectTemplate('{{ t.id }}')">
+                    <input type="radio" name="template_id" value="{{ t.id }}" onchange="handleTemplateChange()">
+                    <div class="template-option-content">
+                        <div class="template-option-name">{{ t.name }}</div>
+                        <div class="template-option-meta">
+                            {{ t.angle.value|title if t.angle else 'Exploratory' }}
+                            {% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %}
+                            · {{ t.default_minutes }} min
+                        </div>
+                        {% if t.description %}
+                        <div class="template-option-desc">{{ t.description }}</div>
+                        {% endif %}
+                    </div>
+                </label>
+                {% endfor %}
+
+                {% if templates %}
+                <div class="template-divider"></div>
+                {% endif %}
+
+                <label class="template-option" onclick="selectTemplate('other')">
+                    <input type="radio" name="template_id" value="" id="template-other" onchange="handleTemplateChange()">
+                    <div class="template-option-content">
+                        <div class="template-option-name">Other</div>
+                        <div class="template-option-desc">Create a custom interview with your own content and style.</div>
+                    </div>
+                </label>
+
+                <div id="other-content" class="other-content">
+                    <div class="other-subsection">
+                        <div class="other-subsection-title">Content</div>
+
+                        <div class="form-group">
+                            <label for="questions_text">Questions</label>
+                            <textarea id="questions_text" name="questions_text" rows="4" placeholder="What drew you to this field?&#10;Can you describe a typical day?&#10;(one question per line)"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="research_urls">Research Links</label>
+                            <textarea id="research_urls" name="research_urls" rows="2" placeholder="https://example.com/background&#10;(one URL per line)"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="other-subsection">
+                        <div class="other-subsection-title">Style</div>
+
+                        <div class="form-group">
+                            <label>Approach</label>
+                            <select name="angle" id="angle-select" onchange="toggleCustomAngle()">
+                                <option value="exploratory">Exploratory - learning from guest</option>
+                                <option value="interrogative">Interrogative - testing claims</option>
+                                <option value="imaginative">Imaginative - building ideas</option>
+                                <option value="documentary">Documentary - capturing story</option>
+                                <option value="coaching">Coaching - facilitating insight</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="custom-angle-group" style="display: none;">
+                            <label for="angle_custom">Custom Approach</label>
+                            <textarea id="angle_custom" name="angle_custom" rows="3" placeholder="Describe how Boswell should approach this interview..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="angle_secondary">Blend with</label>
+                            <select name="angle_secondary" id="angle-secondary-select">
+                                <option value="">None</option>
+                                <option value="exploratory">Exploratory</option>
+                                <option value="interrogative">Interrogative</option>
+                                <option value="imaginative">Imaginative</option>
+                                <option value="documentary">Documentary</option>
+                                <option value="coaching">Coaching</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="save-template-row">
+                        <label>
+                            <input type="checkbox" name="save_as_template" id="save-as-template" onchange="toggleTemplateName()">
+                            Save as template for reuse
+                        </label>
+                        <input type="text" name="new_template_name" id="new-template-name" placeholder="Template name" style="display: none;">
+                    </div>
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <div class="form-section">
                 <h3 class="form-section-title">Background on This Person</h3>
-                <p class="form-section-desc">Optional: Give Boswell context about this specific interviewee to personalize the conversation.</p>
+                <p class="form-section-desc">Optional: Give Boswell context about this specific interviewee.</p>
 
                 <div class="form-group">
                     <label for="context_notes">Notes</label>
-                    <textarea id="context_notes" name="context_notes" rows="4" placeholder="VP of Operations at WidgetCorp, manufacturing industry. Been a customer for 2 years. Previously mentioned challenges with integration complexity."></textarea>
-                    <p class="form-hint">Background, role, company, previous interactions, areas of interest.</p>
+                    <textarea id="context_notes" name="context_notes" rows="4" placeholder="VP of Operations at WidgetCorp, manufacturing industry. Been a customer for 2 years."></textarea>
+                    <p class="form-hint">Background, role, company, previous interactions.</p>
                 </div>
 
                 <div class="form-group">
                     <label for="context_urls">Links</label>
-                    <textarea id="context_urls" name="context_urls" rows="3" placeholder="https://linkedin.com/in/stevejohnson&#10;https://widgetcorp.com/about&#10;(one URL per line)"></textarea>
-                    <p class="form-hint">LinkedIn, company page, articles they've written.</p>
+                    <textarea id="context_urls" name="context_urls" rows="2" placeholder="https://linkedin.com/in/stevejohnson&#10;(one URL per line)"></textarea>
                 </div>
 
                 <div class="form-group">
@@ -94,7 +213,6 @@
                         <span class="file-upload-label">PDFs, text files, notes</span>
                         <input type="file" id="context_files" name="context_files" multiple accept=".pdf,.txt,.md,.doc,.docx">
                     </div>
-                    <p class="form-hint">Bio, previous meeting notes, relevant documents.</p>
                 </div>
             </div>
 
@@ -105,4 +223,39 @@
         </form>
     </div>
 </div>
+
+<script>
+function selectTemplate(id) {
+    // Remove selected class from all
+    document.querySelectorAll('.template-option').forEach(el => el.classList.remove('selected'));
+    // Add to clicked one
+    event.currentTarget.classList.add('selected');
+}
+
+function handleTemplateChange() {
+    const otherRadio = document.getElementById('template-other');
+    const otherContent = document.getElementById('other-content');
+
+    if (otherRadio.checked) {
+        otherContent.classList.add('visible');
+    } else {
+        otherContent.classList.remove('visible');
+    }
+}
+
+function toggleCustomAngle() {
+    const select = document.getElementById('angle-select');
+    const customGroup = document.getElementById('custom-angle-group');
+    customGroup.style.display = select.value === 'custom' ? 'block' : 'none';
+}
+
+function toggleTemplateName() {
+    const checkbox = document.getElementById('save-as-template');
+    const nameInput = document.getElementById('new-template-name');
+    nameInput.style.display = checkbox.checked ? 'block' : 'none';
+    if (checkbox.checked) {
+        nameInput.focus();
+    }
+}
+</script>
 {% endblock %}

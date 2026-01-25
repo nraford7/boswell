@@ -157,17 +157,6 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="template_id">Interview Type</label>
-                    <select id="template_id" name="template_id">
-                        <option value="">No interview type</option>
-                        {% for template in templates %}
-                        <option value="{{ template.id }}">{{ template.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="form-hint">Optional: Select an interview type to pre-configure settings.</p>
-                </div>
-
-                <div class="form-group">
                     <label for="target_minutes">Target Duration (minutes)</label>
                     <input type="number" id="target_minutes" name="target_minutes" value="30" min="5" max="120" required>
                     <p class="form-hint">The target length for the interview (5-120 minutes).</p>

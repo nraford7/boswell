@@ -18,11 +18,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from boswell.server.database import get_session_context
-from boswell.server.models import Interview, InterviewStatus, Project, Transcript
+from boswell.server.models import (
+    Interview,
+    InterviewAngle,
+    InterviewStatus,
+    InterviewTemplate,
+    Project,
+    Transcript,
+)
 from boswell.voice.pipeline import run_interview
 from boswell.voice.prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
+
+
+def get_effective_interview_config(interview, template):
+    """Resolve content and style from interview + template."""
+    return {
+        "questions": interview.questions or (template.questions if template else None),
+        "research_summary": interview.research_summary or (template.research_summary if template else None),
+        "angle": interview.angle or (template.angle if template else None),
+        "angle_secondary": interview.angle_secondary or (template.angle_secondary if template else None),
+        "angle_custom": interview.angle_custom or (template.angle_custom if template else None),
+    }
+
 
 # Track active interviews to prevent duplicate bot sessions
 # Maps interview_id -> asyncio.Task
@@ -59,6 +78,9 @@ async def start_voice_interview(
     is_returning: bool = False,
     previous_transcript: list[dict] | None = None,
     previous_context: list[dict] | None = None,
+    angle: str | None = None,
+    angle_secondary: str | None = None,
+    angle_custom: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict], str | None]:
     """Start a voice interview.
 
@@ -68,6 +90,9 @@ async def start_voice_interview(
         is_returning: Whether this is a returning guest.
         previous_transcript: Previous transcript entries for returning guests.
         previous_context: Previous conversation context for returning guests.
+        angle: Primary interview angle/style.
+        angle_secondary: Secondary interview angle/style.
+        angle_custom: Custom angle instructions.
 
     Returns:
         Tuple of (transcript entries, conversation history, detected_mode).
@@ -118,6 +143,9 @@ async def start_voice_interview(
         intro_prompt=intro_prompt,
         target_minutes=project.target_minutes,
         max_minutes=project.target_minutes + 15,  # Allow 15 min buffer
+        angle=angle,
+        angle_secondary=angle_secondary,
+        angle_custom=angle_custom,
     )
 
     # Add returning guest prompt if applicable
@@ -322,6 +350,22 @@ async def run_interview_task(interview_id: UUID) -> None:
                     previous_transcript = existing_transcript.entries or []
                     previous_context = existing_transcript.conversation_context or []
 
+            # Fetch template if set
+            template = None
+            if interview.template_id:
+                template_result = await db.execute(
+                    select(InterviewTemplate).where(InterviewTemplate.id == interview.template_id)
+                )
+                template = template_result.scalar_one_or_none()
+
+            # Get effective config (resolves interview vs template values)
+            config = get_effective_interview_config(interview, template)
+
+            # Resolve angle values
+            angle_value = config["angle"].value if config["angle"] else None
+            angle_secondary_value = config["angle_secondary"].value if config["angle_secondary"] else None
+            angle_custom_value = config["angle_custom"]
+
         # Create a minimal interview object for the voice session
         # (We can't use the SQLAlchemy object outside the session)
         class InterviewData:
@@ -347,6 +391,9 @@ async def run_interview_task(interview_id: UUID) -> None:
             is_returning=is_returning,
             previous_transcript=previous_transcript,
             previous_context=previous_context,
+            angle=angle_value,
+            angle_secondary=angle_secondary_value,
+            angle_custom=angle_custom_value,
         )
 
         # Save results in a new session

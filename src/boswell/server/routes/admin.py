@@ -22,7 +22,7 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_invitation_email
 from boswell.server.main import templates
-from boswell.server.models import Interview, InterviewStatus, Project, InterviewTemplate, Transcript, User
+from boswell.server.models import Interview, InterviewAngle, InterviewStatus, Project, InterviewTemplate, Transcript, User
 from boswell.server.routes.auth import get_current_user
 
 # Import ingestion functions
@@ -142,7 +142,6 @@ async def project_new_submit(
     topic: str = Form(...),
     public_description: Optional[str] = Form(None),
     intro_prompt: Optional[str] = Form(None),
-    template_id: Optional[str] = Form(None),
     target_minutes: int = Form(30),
     research_urls: Optional[str] = Form(None),
     research_files: list[UploadFile] = File(default=[]),
@@ -158,22 +157,6 @@ async def project_new_submit(
     topic = topic.strip()
     if not topic:
         raise HTTPException(status_code=400, detail="Topic is required")
-
-    # Parse template_id if provided
-    parsed_template_id: Optional[UUID] = None
-    if template_id and template_id.strip():
-        try:
-            parsed_template_id = UUID(template_id)
-            # Verify the template belongs to the user's team
-            result = await db.execute(
-                select(InterviewTemplate)
-                .where(InterviewTemplate.id == parsed_template_id)
-                .where(InterviewTemplate.team_id == user.team_id)
-            )
-            if result.scalar_one_or_none() is None:
-                raise HTTPException(status_code=400, detail="Invalid template")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid template ID")
 
     # Validate target_minutes
     if target_minutes < 5 or target_minutes > 120:
@@ -255,7 +238,6 @@ async def project_new_submit(
     # Create the project (WITHOUT interview)
     project = Project(
         team_id=user.team_id,
-        template_id=parsed_template_id,
         name=name,
         topic=topic,
         public_description=public_desc if public_desc else None,
@@ -391,12 +373,21 @@ async def interview_new_form(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Fetch templates for this team
+    templates_result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    team_templates = templates_result.scalars().all()
+
     return templates.TemplateResponse(
         request=request,
         name="admin/interview_new.html",
         context={
             "user": user,
             "project": project,
+            "templates": team_templates,
         },
     )
 
@@ -408,6 +399,17 @@ async def interview_new_submit(
     user: User = Depends(require_auth),
     name: str = Form(...),
     email: Optional[str] = Form(None),
+    template_id: Optional[str] = Form(None),
+    # "Other" content fields
+    questions_text: Optional[str] = Form(None),
+    research_urls: Optional[str] = Form(None),
+    angle: Optional[str] = Form(None),
+    angle_secondary: Optional[str] = Form(None),
+    angle_custom: Optional[str] = Form(None),
+    # Save as template
+    save_as_template: Optional[str] = Form(None),
+    new_template_name: Optional[str] = Form(None),
+    # Person context
     context_notes: Optional[str] = Form(None),
     context_urls: Optional[str] = Form(None),
     context_files: list[UploadFile] = File(default=[]),
@@ -434,15 +436,13 @@ async def interview_new_submit(
     # Clean email
     email = email.strip().lower() if email else None
 
-    # Process context materials
+    # Process person context materials
     context_parts = []
     context_links = []
 
-    # Add notes if provided
     if context_notes and context_notes.strip():
         context_parts.append(context_notes.strip())
 
-    # Process context URLs
     if context_urls and INGESTION_AVAILABLE:
         urls = [u.strip() for u in context_urls.split("\n") if u.strip()]
         for url in urls:
@@ -455,7 +455,6 @@ async def interview_new_submit(
                 except Exception as e:
                     logger.warning(f"Failed to fetch URL {url}: {e}")
 
-    # Process context files
     if context_files and INGESTION_AVAILABLE:
         for upload_file in context_files:
             if upload_file.filename and upload_file.size and upload_file.size > 0:
@@ -474,14 +473,84 @@ async def interview_new_submit(
                 except Exception as e:
                     logger.warning(f"Failed to process file {upload_file.filename}: {e}")
 
-    # Combine context
     combined_context = "\n\n".join(context_parts) if context_parts else None
+
+    # Determine if using template or "Other"
+    parsed_template_id = None
+    interview_questions = None
+    interview_research_summary = None
+    interview_research_links = None
+    interview_angle = None
+    interview_angle_secondary = None
+    interview_angle_custom = None
+
+    if template_id and template_id.strip():
+        # Using a template
+        try:
+            parsed_template_id = UUID(template_id)
+        except ValueError:
+            pass
+    else:
+        # "Other" - parse custom content and style
+        if questions_text and questions_text.strip():
+            questions_list = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
+            if questions_list:
+                interview_questions = {"questions": [{"text": q} for q in questions_list]}
+
+        if research_urls and research_urls.strip():
+            urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
+            if urls:
+                interview_research_links = urls
+
+        if angle and angle.strip():
+            try:
+                interview_angle = InterviewAngle(angle)
+            except ValueError:
+                interview_angle = InterviewAngle.exploratory
+
+        if angle_secondary and angle_secondary.strip():
+            try:
+                interview_angle_secondary = InterviewAngle(angle_secondary)
+            except ValueError:
+                pass
+
+        if angle_custom and angle == "custom":
+            interview_angle_custom = angle_custom.strip()
+
+        # Save as template if requested
+        if save_as_template and new_template_name and new_template_name.strip():
+            new_template = InterviewTemplate(
+                team_id=user.team_id,
+                name=new_template_name.strip(),
+                questions=interview_questions,
+                research_links=interview_research_links,
+                angle=interview_angle or InterviewAngle.exploratory,
+                angle_secondary=interview_angle_secondary,
+                angle_custom=interview_angle_custom,
+                default_minutes=30,
+            )
+            db.add(new_template)
+            await db.flush()
+            # Use the new template
+            parsed_template_id = new_template.id
+            # Clear interview-level overrides since template now has them
+            interview_questions = None
+            interview_research_links = None
+            interview_angle = None
+            interview_angle_secondary = None
+            interview_angle_custom = None
 
     # Create interview
     interview = Interview(
         project_id=project_id,
         name=name,
         email=email,
+        template_id=parsed_template_id,
+        questions=interview_questions,
+        research_links=interview_research_links,
+        angle=interview_angle,
+        angle_secondary=interview_angle_secondary,
+        angle_custom=interview_angle_custom,
         context_notes=combined_context,
         context_links=context_links if context_links else None,
     )
@@ -558,8 +627,12 @@ async def template_new_submit(
     user: User = Depends(require_auth),
     name: str = Form(...),
     description: Optional[str] = Form(None),
-    prompt_modifier: Optional[str] = Form(None),
     default_minutes: int = Form(30),
+    questions_text: Optional[str] = Form(None),
+    research_urls: Optional[str] = Form(None),
+    angle: str = Form("exploratory"),
+    angle_secondary: Optional[str] = Form(None),
+    angle_custom: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
     """Create a new template."""
@@ -570,7 +643,6 @@ async def template_new_submit(
 
     # Clean optional fields
     description = description.strip() if description else None
-    prompt_modifier = prompt_modifier.strip() if prompt_modifier else None
 
     # Validate default_minutes
     if default_minutes < 5 or default_minutes > 120:
@@ -578,13 +650,48 @@ async def template_new_submit(
             status_code=400, detail="Default duration must be between 5 and 120 minutes"
         )
 
+    # Parse questions
+    questions = None
+    if questions_text and questions_text.strip():
+        questions_list = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
+        if questions_list:
+            questions = {"questions": [{"text": q} for q in questions_list]}
+
+    # Parse research URLs
+    research_links = None
+    if research_urls and research_urls.strip():
+        urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
+        if urls:
+            research_links = urls
+
+    # Parse angle
+    try:
+        angle_enum = InterviewAngle(angle)
+    except ValueError:
+        angle_enum = InterviewAngle.exploratory
+
+    # Parse secondary angle
+    angle_secondary_enum = None
+    if angle_secondary and angle_secondary.strip():
+        try:
+            angle_secondary_enum = InterviewAngle(angle_secondary)
+        except ValueError:
+            pass
+
+    # Clean custom angle
+    angle_custom_text = angle_custom.strip() if angle_custom and angle == "custom" else None
+
     # Create the template
     template = InterviewTemplate(
         team_id=user.team_id,
         name=name,
         description=description,
-        prompt_modifier=prompt_modifier,
         default_minutes=default_minutes,
+        questions=questions,
+        research_links=research_links,
+        angle=angle_enum,
+        angle_secondary=angle_secondary_enum,
+        angle_custom=angle_custom_text,
     )
     db.add(template)
     await db.flush()
@@ -628,8 +735,12 @@ async def template_edit_submit(
     user: User = Depends(require_auth),
     name: str = Form(...),
     description: Optional[str] = Form(None),
-    prompt_modifier: Optional[str] = Form(None),
     default_minutes: int = Form(30),
+    questions_text: Optional[str] = Form(None),
+    research_urls: Optional[str] = Form(None),
+    angle: str = Form("exploratory"),
+    angle_secondary: Optional[str] = Form(None),
+    angle_custom: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
     """Update an existing template."""
@@ -650,7 +761,6 @@ async def template_edit_submit(
 
     # Clean optional fields
     description = description.strip() if description else None
-    prompt_modifier = prompt_modifier.strip() if prompt_modifier else None
 
     # Validate default_minutes
     if default_minutes < 5 or default_minutes > 120:
@@ -658,11 +768,46 @@ async def template_edit_submit(
             status_code=400, detail="Default duration must be between 5 and 120 minutes"
         )
 
+    # Parse questions
+    questions = None
+    if questions_text and questions_text.strip():
+        questions_list = [q.strip() for q in questions_text.strip().split("\n") if q.strip()]
+        if questions_list:
+            questions = {"questions": [{"text": q} for q in questions_list]}
+
+    # Parse research URLs
+    research_links = None
+    if research_urls and research_urls.strip():
+        urls = [u.strip() for u in research_urls.strip().split("\n") if u.strip() and u.strip().startswith("http")]
+        if urls:
+            research_links = urls
+
+    # Parse angle
+    try:
+        angle_enum = InterviewAngle(angle)
+    except ValueError:
+        angle_enum = InterviewAngle.exploratory
+
+    # Parse secondary angle
+    angle_secondary_enum = None
+    if angle_secondary and angle_secondary.strip():
+        try:
+            angle_secondary_enum = InterviewAngle(angle_secondary)
+        except ValueError:
+            pass
+
+    # Clean custom angle
+    angle_custom_text = angle_custom.strip() if angle_custom and angle == "custom" else None
+
     # Update the template
     template.name = name
     template.description = description
-    template.prompt_modifier = prompt_modifier
     template.default_minutes = default_minutes
+    template.questions = questions
+    template.research_links = research_links
+    template.angle = angle_enum
+    template.angle_secondary = angle_secondary_enum
+    template.angle_custom = angle_custom_text
 
     await db.flush()
 
@@ -936,7 +1081,6 @@ async def bulk_import_submit(
     request: Request,
     user: User = Depends(require_auth),
     csv_file: UploadFile = File(...),
-    template_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
     """Process bulk import of projects and interviews from CSV.
@@ -947,22 +1091,6 @@ async def bulk_import_submit(
     - project_topic (optional): Creates a new project with this topic
     - project_id (optional): Adds interview to existing project
     """
-    # Parse template_id if provided
-    parsed_template_id: Optional[UUID] = None
-    if template_id and template_id.strip():
-        try:
-            parsed_template_id = UUID(template_id)
-            # Verify the template belongs to the user's team
-            result = await db.execute(
-                select(InterviewTemplate)
-                .where(InterviewTemplate.id == parsed_template_id)
-                .where(InterviewTemplate.team_id == user.team_id)
-            )
-            if result.scalar_one_or_none() is None:
-                raise HTTPException(status_code=400, detail="Invalid template")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid template ID")
-
     # Read and parse CSV
     content = await csv_file.read()
     try:
@@ -1013,7 +1141,6 @@ async def bulk_import_submit(
             else:
                 project = Project(
                     team_id=user.team_id,
-                    template_id=parsed_template_id,
                     topic=topic,
                     target_minutes=30,
                     created_by=user.id,
