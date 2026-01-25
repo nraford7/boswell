@@ -92,7 +92,6 @@ async def dashboard(
         select(Project)
         .where(Project.team_id == user.team_id)
         .options(
-            selectinload(Project.template),
             selectinload(Project.interviews),
         )
         .order_by(Project.created_at.desc())
@@ -271,7 +270,6 @@ async def project_detail(
         select(Project)
         .where(Project.id == project_id)
         .options(
-            selectinload(Project.template),
             selectinload(Project.interviews).selectinload(Interview.transcript),
             selectinload(Project.interviews).selectinload(Interview.analysis),
         )
@@ -1462,7 +1460,6 @@ async def edit_project_form(
     """Show the project edit form."""
     result = await db.execute(
         select(Project)
-        .options(selectinload(Project.template))
         .where(Project.id == project_id)
         .where(Project.team_id == user.team_id)
     )
