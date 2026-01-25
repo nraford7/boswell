@@ -101,6 +101,7 @@
 
             <div class="form-section">
                 <h3 class="form-section-title">Interview Type</h3>
+                {% if templates %}
                 <p class="form-section-desc">Choose a template or create a custom interview.</p>
 
                 {% for t in templates %}
@@ -120,9 +121,7 @@
                 </label>
                 {% endfor %}
 
-                {% if templates %}
                 <div class="template-divider"></div>
-                {% endif %}
 
                 <label class="template-option" onclick="selectTemplate('other')">
                     <input type="radio" name="template_id" value="" id="template-other" onchange="handleTemplateChange()">
@@ -131,8 +130,12 @@
                         <div class="template-option-desc">Create a custom interview with your own content and style.</div>
                     </div>
                 </label>
+                {% else %}
+                <p class="form-section-desc">Configure the interview style and content below. <a href="/admin/templates/new" style="color: var(--accent);">Create a template</a> to reuse configurations.</p>
+                <input type="hidden" name="template_id" value="">
+                {% endif %}
 
-                <div id="other-content" class="other-content">
+                <div id="other-content" class="other-content{% if not templates %} visible{% endif %}">
                     <div class="other-subsection">
                         <div class="other-subsection-title">Content</div>
 
