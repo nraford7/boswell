@@ -189,6 +189,7 @@ class Interview(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    session_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="interviews")
