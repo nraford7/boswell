@@ -56,15 +56,21 @@ def _extract_questions_list(project: Project) -> list[str]:
 async def start_voice_interview(
     interview: Interview,
     project: Project,
-) -> tuple[list[dict[str, Any]], list[dict]]:
+    is_returning: bool = False,
+    previous_transcript: list[dict] | None = None,
+    previous_context: list[dict] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict], str | None]:
     """Start a voice interview.
 
     Args:
         interview: The Interview model instance with room_name and room_token.
         project: The Project model instance with topic and questions.
+        is_returning: Whether this is a returning guest.
+        previous_transcript: Previous transcript entries for returning guests.
+        previous_context: Previous conversation context for returning guests.
 
     Returns:
-        Tuple of (transcript entries, conversation history).
+        Tuple of (transcript entries, conversation history, detected_mode).
 
     Raises:
         ValueError: If interview is missing room credentials.
@@ -114,6 +120,16 @@ async def start_voice_interview(
         max_minutes=project.target_minutes + 15,  # Allow 15 min buffer
     )
 
+    # Add returning guest prompt if applicable
+    detected_mode = None
+    if is_returning and previous_transcript:
+        from boswell.voice.prompts import build_returning_guest_prompt
+        returning_prompt = build_returning_guest_prompt(
+            previous_transcript=previous_transcript,
+            guest_name=guest_name,
+        )
+        system_prompt = system_prompt + "\n\n" + returning_prompt
+
     logger.info(
         f"Starting voice interview {interview.id} "
         f"(room={interview.room_name}, topic='{project.topic}')"
@@ -133,7 +149,7 @@ async def start_voice_interview(
         f"{len(transcript_entries)} transcript entries"
     )
 
-    return transcript_entries, conversation_history
+    return transcript_entries, conversation_history, detected_mode
 
 
 async def save_transcript(
@@ -265,9 +281,10 @@ async def run_interview_task(interview_id: UUID) -> None:
         )
 
         # Run the interview (this blocks until complete)
-        transcript_entries, conversation_history = await start_voice_interview(
+        transcript_entries, conversation_history, detected_mode = await start_voice_interview(
             interview_data, project
         )
+        # Note: detected_mode will be used in Task 9 for returning guest handling
 
         # Save results in a new session
         async with get_session_context() as db:
