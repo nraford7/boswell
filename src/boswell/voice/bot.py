@@ -146,7 +146,7 @@ class InterviewBot:
             self.interview.status = InterviewStatus.IN_PROGRESS
             save_interview(self.interview)
 
-            transcript, conversation_history = await run_interview(
+            transcript, conversation_history, _ = await run_interview(
                 room_url=room.url,
                 room_token=room.token,
                 system_prompt=system_prompt,
@@ -218,7 +218,7 @@ class InterviewBot:
             self.interview.status = InterviewStatus.IN_PROGRESS
             save_interview(self.interview)
 
-            transcript, conversation_history = await run_interview(
+            transcript, conversation_history, _ = await run_interview(
                 room_url=room.url,
                 room_token=room.token,
                 system_prompt=system_prompt,

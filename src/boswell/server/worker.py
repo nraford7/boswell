@@ -136,7 +136,7 @@ async def start_voice_interview(
     )
 
     # Run the Pipecat pipeline (blocks until interview ends)
-    transcript_entries, conversation_history = await run_interview(
+    transcript_entries, conversation_history, detected_mode = await run_interview(
         room_url=room_url,
         room_token=room_token,
         system_prompt=system_prompt,

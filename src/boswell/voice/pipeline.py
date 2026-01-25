@@ -16,6 +16,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from boswell.config import load_config
 from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
 from boswell.voice.acknowledgment import AcknowledgmentProcessor
+from boswell.voice.mode_detection import ModeDetectionProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
 from boswell.voice.strike_control import StrikeControlProcessor
 # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency issues
@@ -30,7 +31,7 @@ async def create_pipeline(
     guest_name: str = "Guest",
     on_transcript_update: Callable | None = None,
     initial_messages: list[dict] | None = None,
-) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext]:
+) -> tuple[PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext, ModeDetectionProcessor]:
     """Create a Pipecat pipeline for voice interviews.
 
     Args:
@@ -43,7 +44,7 @@ async def create_pipeline(
         initial_messages: Optional conversation history for resuming paused interviews.
 
     Returns:
-        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext).
+        Tuple of (PipelineTask, PipelineRunner, TranscriptCollector, AnthropicLLMContext, ModeDetectionProcessor).
 
     Raises:
         RuntimeError: If required API keys are not configured.
@@ -140,6 +141,9 @@ async def create_pipeline(
     # Set up dynamic speed control (processes [SPEED:x] tags from LLM)
     speed_control_processor = SpeedControlProcessor(tts)
 
+    # Set up mode detection for returning guests
+    mode_detection_processor = ModeDetectionProcessor()
+
     # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency
     # speaking_state_processor = SpeakingStateProcessor()
 
@@ -155,6 +159,7 @@ async def create_pipeline(
             llm,
             strike_control_processor,  # Process strike tags and mark transcript
             speed_control_processor,  # Process speed tags and adjust TTS
+            mode_detection_processor,  # Detect mode tags for returning guests
             bot_response_collector,  # Capture bot responses after LLM
             tts,
             # speaking_state_processor,  # Disabled - latency issues
@@ -224,7 +229,7 @@ async def create_pipeline(
     # Create runner
     runner = PipelineRunner()
 
-    return task, runner, transcript_collector, actual_context
+    return task, runner, transcript_collector, actual_context, mode_detection_processor
 
 
 async def run_interview(
@@ -234,7 +239,7 @@ async def run_interview(
     bot_name: str = "Boswell",
     guest_name: str = "Guest",
     initial_messages: list[dict] | None = None,
-) -> tuple[list[dict[str, Any]], list[dict]]:
+) -> tuple[list[dict[str, Any]], list[dict], str | None]:
     """Run a voice interview session.
 
     Args:
@@ -246,9 +251,9 @@ async def run_interview(
         initial_messages: Optional conversation history for resuming.
 
     Returns:
-        Tuple of (transcript entries, conversation history).
+        Tuple of (transcript entries, conversation history, detected_mode).
     """
-    task, runner, transcript_collector, context = await create_pipeline(
+    task, runner, transcript_collector, context, mode_processor = await create_pipeline(
         room_url=room_url,
         room_token=room_token,
         system_prompt=system_prompt,
@@ -259,5 +264,5 @@ async def run_interview(
 
     await runner.run(task)
 
-    # Return collected transcript and conversation history for potential resume
-    return transcript_collector.get_entries(), context.messages
+    # Return collected transcript, conversation history, and detected mode for potential resume
+    return transcript_collector.get_entries(), context.messages, mode_processor.detected_mode
