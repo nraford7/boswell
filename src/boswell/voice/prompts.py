@@ -137,6 +137,59 @@ RESPONSE FORMAT:
 Remember: The prepared questions are a guide, not a script. Personalize them based on what you know about this specific interviewee. Your goal is to have a genuine, insightful conversation."""
 
 
+def build_returning_guest_prompt(
+    previous_transcript: list[dict],
+    guest_name: str = "Guest",
+) -> str:
+    """Build additional prompt for returning guests.
+
+    Args:
+        previous_transcript: List of previous transcript entries.
+        guest_name: Name of the guest.
+
+    Returns:
+        Additional prompt text to inject into system prompt.
+    """
+    # Format transcript entries for the prompt
+    transcript_text = ""
+    for entry in previous_transcript[-20:]:  # Last 20 entries to avoid token limits
+        speaker = entry.get("speaker", "unknown")
+        text = entry.get("text", "")
+        if speaker == "guest":
+            transcript_text += f"{guest_name}: {text}\n"
+        else:
+            transcript_text += f"Boswell: {text}\n"
+
+    return f"""
+RETURNING GUEST - IMPORTANT:
+This guest has completed a previous interview session. When they join, greet them warmly and ask what they'd like to do:
+
+1. RESUME - "Pick up where we left off" - Continue the conversation, appending to the existing transcript
+2. ADD DETAIL - "Add detail to my previous answers" - Review and refine previous answers
+3. FRESH START - "Start completely fresh" - Delete previous answers and start over (CONFIRM BEFORE PROCEEDING)
+
+Listen for their intent and respond accordingly. Be flexible - if they change their mind or ask about previous answers, accommodate them (unless they confirmed Fresh Start).
+
+For FRESH START: You MUST confirm before proceeding. Say something like "Just to confirm - you'd like to start completely fresh? This will replace your previous answers. Is that okay?" Only proceed after verbal confirmation.
+
+For ADD DETAIL: Offer to help them review their previous answers. Ask something like "Would you like to add anything new, refine a specific answer, or should I run through the questions to jog your memory?" Adapt to what they want.
+
+Once the guest confirms their choice, send an app message with their choice so the system knows how to handle the transcript.
+
+PREVIOUS CONVERSATION:
+<previous_transcript>
+{transcript_text}
+</previous_transcript>
+
+CRITICAL: After the guest confirms their choice (resume/add_detail/fresh_start), include in your response:
+- For resume: [MODE:resume]
+- For add detail: [MODE:add_detail]
+- For fresh start (after confirmation): [MODE:fresh_start]
+
+This tag will be processed by the system to handle the transcript correctly.
+"""
+
+
 def build_greeting_prompt(
     interviewee_name: str | None = None,
     intro_prompt: str | None = None,
