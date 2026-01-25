@@ -157,16 +157,16 @@ async def save_transcript(
     interview_id: UUID,
     entries: list[dict[str, Any]],
     conversation_context: list[dict],
+    mode: str | None = None,
 ) -> Transcript:
-    """Save interview transcript to database.
-
-    Creates a new Transcript record or updates existing one for the interview.
+    """Save interview transcript to database based on mode.
 
     Args:
         db: Database session.
         interview_id: UUID of the interview.
         entries: List of transcript entry dictionaries.
-        conversation_context: List of conversation messages (for potential resume).
+        conversation_context: List of conversation messages.
+        mode: Interview mode (resume, add_detail, fresh_start, or None for new).
 
     Returns:
         The created or updated Transcript model instance.
@@ -177,8 +177,47 @@ async def save_transcript(
     )
     transcript = result.scalar_one_or_none()
 
-    if transcript:
-        # Update existing transcript (e.g., resumed interview)
+    if mode == "fresh_start":
+        # Delete existing transcript and analysis
+        if transcript:
+            await db.delete(transcript)
+            # Also delete analysis
+            from boswell.server.models import Analysis
+            analysis_result = await db.execute(
+                select(Analysis).where(Analysis.interview_id == interview_id)
+            )
+            analysis = analysis_result.scalar_one_or_none()
+            if analysis:
+                await db.delete(analysis)
+            await db.flush()
+
+        # Create new transcript
+        transcript = Transcript(
+            interview_id=interview_id,
+            entries=entries,
+            conversation_context=conversation_context,
+        )
+        db.add(transcript)
+        logger.info(f"Fresh start: created new transcript for interview {interview_id}")
+
+    elif mode == "resume" and transcript:
+        # Append new entries to existing transcript
+        existing_entries = transcript.entries or []
+        if isinstance(existing_entries, list):
+            transcript.entries = existing_entries + entries
+        else:
+            transcript.entries = entries
+        transcript.conversation_context = conversation_context
+        logger.info(f"Resume: appended to transcript for interview {interview_id}")
+
+    elif mode == "add_detail" and transcript:
+        # Replace transcript with combined conversation (bot wove them together)
+        transcript.entries = entries
+        transcript.conversation_context = conversation_context
+        logger.info(f"Add detail: updated transcript for interview {interview_id}")
+
+    elif transcript:
+        # Default: append (backwards compatible)
         existing_entries = transcript.entries or []
         if isinstance(existing_entries, list):
             transcript.entries = existing_entries + entries
@@ -186,6 +225,7 @@ async def save_transcript(
             transcript.entries = entries
         transcript.conversation_context = conversation_context
         logger.info(f"Updated existing transcript for interview {interview_id}")
+
     else:
         # Create new transcript
         transcript = Transcript(
@@ -205,6 +245,7 @@ async def complete_interview(
     interview_id: UUID,
     transcript_entries: list[dict[str, Any]],
     conversation_history: list[dict],
+    mode: str | None = None,
 ) -> None:
     """Complete an interview by saving transcript and updating status.
 
@@ -213,19 +254,22 @@ async def complete_interview(
         interview_id: UUID of the interview.
         transcript_entries: List of transcript entry dictionaries.
         conversation_history: List of conversation messages.
+        mode: Interview mode (resume, add_detail, fresh_start, or None for new).
     """
-    # Save transcript
-    await save_transcript(db, interview_id, transcript_entries, conversation_history)
+    # Save transcript with mode
+    await save_transcript(db, interview_id, transcript_entries, conversation_history, mode)
 
-    # Update interview status to completed
+    # Update interview status and mode
     result = await db.execute(select(Interview).where(Interview.id == interview_id))
     interview = result.scalar_one_or_none()
 
     if interview:
         interview.status = InterviewStatus.completed
         interview.completed_at = datetime.now(timezone.utc)
+        if mode:
+            interview.interview_mode = mode
         await db.flush()
-        logger.info(f"Interview {interview_id} marked as completed")
+        logger.info(f"Interview {interview_id} marked as completed (mode={mode})")
 
 
 async def run_interview_task(interview_id: UUID) -> None:
@@ -284,12 +328,11 @@ async def run_interview_task(interview_id: UUID) -> None:
         transcript_entries, conversation_history, detected_mode = await start_voice_interview(
             interview_data, project
         )
-        # Note: detected_mode will be used in Task 9 for returning guest handling
 
         # Save results in a new session
         async with get_session_context() as db:
             await complete_interview(
-                db, interview_id, transcript_entries, conversation_history
+                db, interview_id, transcript_entries, conversation_history, detected_mode
             )
 
     except Exception as e:
