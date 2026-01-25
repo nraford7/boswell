@@ -26,6 +26,15 @@ class InterviewStatus(str, enum.Enum):
     expired = "expired"
 
 
+class InterviewMode(str, enum.Enum):
+    """Mode for returning guest interviews."""
+
+    new = "new"  # First-time interview
+    resume = "resume"  # Continue where left off
+    add_detail = "add_detail"  # Review and refine previous answers
+    fresh_start = "fresh_start"  # Delete old transcript, start over
+
+
 class JobStatus(str, enum.Enum):
     """Status of a background job."""
 
@@ -190,6 +199,7 @@ class Interview(Base):
         DateTime(timezone=True), nullable=True
     )
     session_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    interview_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="interviews")
