@@ -213,8 +213,29 @@ async def project_new_submit(
             if url.startswith("http://") or url.startswith("https://"):
                 research_links.append(url)
 
-    # Generate questions based on topic (and research if available)
-    if INGESTION_AVAILABLE:
+    # Clean optional string fields
+    public_desc = public_description.strip() if public_description else None
+    intro = intro_prompt.strip() if intro_prompt else None
+
+    # Handle template_id first - this determines whether to generate questions
+    parsed_template_id = None
+    if template_id and template_id.strip():
+        try:
+            template_uuid = UUID(template_id)
+            # Verify template belongs to team
+            template_result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == template_uuid)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            if template_result.scalar_one_or_none() is not None:
+                parsed_template_id = template_uuid
+        except ValueError:
+            pass  # Invalid UUID, ignore
+
+    # Only generate questions if NO template is selected
+    # When a template is selected, its questions will be used by the worker
+    if not parsed_template_id and INGESTION_AVAILABLE:
         try:
             # Use research summary if available, otherwise just use topic
             research_content = research_summary or ""
@@ -230,26 +251,6 @@ async def project_new_submit(
                 }
         except Exception as e:
             logger.warning(f"Failed to generate questions: {e}")
-
-    # Clean optional string fields
-    public_desc = public_description.strip() if public_description else None
-    intro = intro_prompt.strip() if intro_prompt else None
-
-    # Handle template_id
-    parsed_template_id = None
-    if template_id and template_id.strip():
-        try:
-            template_uuid = UUID(template_id)
-            # Verify template belongs to team
-            template_result = await db.execute(
-                select(InterviewTemplate)
-                .where(InterviewTemplate.id == template_uuid)
-                .where(InterviewTemplate.team_id == user.team_id)
-            )
-            if template_result.scalar_one_or_none() is not None:
-                parsed_template_id = template_uuid
-        except ValueError:
-            pass  # Invalid UUID, ignore
 
     # Create the project (WITHOUT interview)
     project = Project(
