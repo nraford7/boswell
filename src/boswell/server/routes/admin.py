@@ -280,6 +280,14 @@ async def project_detail(
     if project is None or project.team_id != user.team_id:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Fetch templates for public link configuration
+    templates_result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    interview_templates = templates_result.scalars().all()
+
     settings = get_settings()
     return templates.TemplateResponse(
         request=request,
@@ -289,6 +297,7 @@ async def project_detail(
             "project": project,
             "interviews": project.interviews,
             "base_url": settings.base_url,
+            "templates": interview_templates,
         },
     )
 

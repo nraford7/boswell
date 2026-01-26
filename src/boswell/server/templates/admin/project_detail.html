@@ -423,7 +423,7 @@
         </p>
 
         {% if project.public_link_token %}
-        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
             <div class="invite-link-wrapper" style="flex: 1; min-width: 200px;">
                 <input type="text" readonly
                        value="{{ base_url }}/join/{{ project.public_link_token }}"
@@ -444,6 +444,21 @@
                 <button type="submit" class="btn btn-outline btn-sm" style="color: #994444; border-color: #994444;">Disable</button>
             </form>
         </div>
+
+        <!-- Interview Type for Public Link -->
+        <form method="post" action="/admin/projects/{{ project.id }}/set-public-template" style="display: flex; align-items: center; gap: 0.75rem;">
+            <label for="public_template_id" style="font-size: 0.875rem; color: var(--fg-muted); white-space: nowrap;">Interview Type:</label>
+            <select name="public_template_id" id="public_template_id" style="flex: 1; max-width: 300px;">
+                <option value="">Default (Project questions, Exploratory)</option>
+                {% for t in templates %}
+                <option value="{{ t.id }}" {% if project.public_template_id == t.id %}selected{% endif %}>
+                    {{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %})
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-outline btn-sm">Save</button>
+        </form>
+
         {% else %}
         <form method="post" action="/admin/projects/{{ project.id }}/generate-public-link">
             <button type="submit" class="btn">Generate Public Link</button>
