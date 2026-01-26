@@ -445,13 +445,13 @@
             </form>
         </div>
 
-        <!-- Interview Type for Public Link -->
-        <form method="post" action="/admin/projects/{{ project.id }}/set-public-template" style="display: flex; align-items: center; gap: 0.75rem;">
-            <label for="public_template_id" style="font-size: 0.875rem; color: var(--fg-muted); white-space: nowrap;">Interview Type:</label>
-            <select name="public_template_id" id="public_template_id" style="flex: 1; max-width: 300px;">
-                <option value="">Default (Project questions, Exploratory)</option>
+        <!-- Interview Type for Project -->
+        <form method="post" action="/admin/projects/{{ project.id }}/set-template" style="display: flex; align-items: center; gap: 0.75rem;">
+            <label for="template_id" style="font-size: 0.875rem; color: var(--fg-muted); white-space: nowrap;">Interview Type:</label>
+            <select name="template_id" id="template_id" style="flex: 1; max-width: 300px;">
+                <option value="">Custom (generate questions from topic)</option>
                 {% for t in templates %}
-                <option value="{{ t.id }}" {% if project.public_template_id == t.id %}selected{% endif %}>
+                <option value="{{ t.id }}" {% if project.template_id == t.id %}selected{% endif %}>
                     {{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %})
                 </option>
                 {% endfor %}

@@ -357,15 +357,15 @@ async def disable_public_link(
     )
 
 
-@router.post("/projects/{project_id}/set-public-template")
-async def set_public_template(
+@router.post("/projects/{project_id}/set-template")
+async def set_template(
     request: Request,
     project_id: UUID,
-    public_template_id: Optional[str] = Form(None),
+    template_id: Optional[str] = Form(None),
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Set the interview template for public links."""
+    """Set the default interview template for the project."""
     result = await db.execute(
         select(Project)
         .where(Project.id == project_id)
@@ -377,9 +377,9 @@ async def set_public_template(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Parse and validate template_id
-    if public_template_id and public_template_id.strip():
+    if template_id and template_id.strip():
         try:
-            template_uuid = UUID(public_template_id)
+            template_uuid = UUID(template_id)
             # Verify template belongs to team
             template_result = await db.execute(
                 select(InterviewTemplate)
@@ -389,11 +389,11 @@ async def set_public_template(
             template = template_result.scalar_one_or_none()
             if template is None:
                 raise HTTPException(status_code=404, detail="Template not found")
-            project.public_template_id = template_uuid
+            project.template_id = template_uuid
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid template ID")
     else:
-        project.public_template_id = None
+        project.template_id = None
 
     await db.commit()
 
@@ -1627,7 +1627,7 @@ async def edit_project(
     intro_prompt: str = Form(""),
     research_summary: str = Form(""),
     questions_text: str = Form(""),
-    public_template_id: Optional[str] = Form(None),
+    template_id: Optional[str] = Form(None),
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
@@ -1656,10 +1656,10 @@ async def edit_project(
     else:
         project.questions = None
 
-    # Handle public_template_id
-    if public_template_id and public_template_id.strip():
+    # Handle template_id
+    if template_id and template_id.strip():
         try:
-            template_uuid = UUID(public_template_id)
+            template_uuid = UUID(template_id)
             # Verify template belongs to team
             template_result = await db.execute(
                 select(InterviewTemplate)
@@ -1667,11 +1667,11 @@ async def edit_project(
                 .where(InterviewTemplate.team_id == user.team_id)
             )
             if template_result.scalar_one_or_none() is not None:
-                project.public_template_id = template_uuid
+                project.template_id = template_uuid
         except ValueError:
             pass  # Invalid UUID, ignore
     else:
-        project.public_template_id = None
+        project.template_id = None
 
     await db.commit()
 

@@ -507,10 +507,10 @@ async def public_join_landing(
 
     Shows a welcome screen where guest enters their name.
     """
-    # Find project by public_link_token, with public_template
+    # Find project by public_link_token, with template
     result = await db.execute(
         select(Project)
-        .options(selectinload(Project.public_template))
+        .options(selectinload(Project.template))
         .where(Project.public_link_token == token)
     )
     project = result.scalar_one_or_none()
@@ -563,7 +563,7 @@ async def start_public_interview(
         email=None,  # No email for public interviews
         status=InterviewStatus.started,
         started_at=datetime.now(timezone.utc),
-        template_id=project.public_template_id,  # Use project's public template
+        template_id=project.template_id,  # Use project's default template
     )
     db.add(interview)
     await db.flush()  # Get the interview ID
