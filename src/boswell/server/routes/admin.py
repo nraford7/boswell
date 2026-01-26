@@ -139,6 +139,7 @@ async def project_new_submit(
     user: User = Depends(require_auth),
     name: str = Form(...),
     topic: str = Form(...),
+    template_id: Optional[str] = Form(None),
     public_description: Optional[str] = Form(None),
     intro_prompt: Optional[str] = Form(None),
     target_minutes: int = Form(30),
@@ -234,11 +235,28 @@ async def project_new_submit(
     public_desc = public_description.strip() if public_description else None
     intro = intro_prompt.strip() if intro_prompt else None
 
+    # Handle template_id
+    parsed_template_id = None
+    if template_id and template_id.strip():
+        try:
+            template_uuid = UUID(template_id)
+            # Verify template belongs to team
+            template_result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == template_uuid)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            if template_result.scalar_one_or_none() is not None:
+                parsed_template_id = template_uuid
+        except ValueError:
+            pass  # Invalid UUID, ignore
+
     # Create the project (WITHOUT interview)
     project = Project(
         team_id=user.team_id,
         name=name,
         topic=topic,
+        template_id=parsed_template_id,
         public_description=public_desc if public_desc else None,
         intro_prompt=intro if intro else None,
         target_minutes=target_minutes,
