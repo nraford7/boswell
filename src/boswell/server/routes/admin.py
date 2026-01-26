@@ -604,12 +604,15 @@ async def interview_new_submit(
             interview_angle_secondary = None
             interview_angle_custom = None
 
+    # If no template selected for this interview, inherit from project
+    final_template_id = parsed_template_id or project.template_id
+
     # Create interview
     interview = Interview(
         project_id=project_id,
         name=name,
         email=email,
-        template_id=parsed_template_id,
+        template_id=final_template_id,
         questions=interview_questions,
         angle=interview_angle,
         angle_secondary=interview_angle_secondary,

@@ -413,6 +413,38 @@
         </div>
     </div>
 
+    <!-- Default Interview Type -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="section-header">
+            <h2>Default Interview Type</h2>
+        </div>
+        <p style="color: var(--fg-muted); margin-bottom: 1rem; font-size: 0.9375rem;">
+            All interviews in this project use this template's questions and style by default.
+        </p>
+
+        <form method="post" action="/admin/projects/{{ project.id }}/set-template" style="display: flex; align-items: center; gap: 0.75rem;">
+            <select name="template_id" id="template_id" style="flex: 1; max-width: 400px;">
+                <option value="">Custom (project-generated questions)</option>
+                {% for t in templates %}
+                <option value="{{ t.id }}" {% if project.template_id == t.id %}selected{% endif %}>
+                    {{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %})
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-outline btn-sm">Save</button>
+        </form>
+
+        {% if project.template %}
+        <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-surface); border-radius: var(--radius-md);">
+            <strong style="font-size: 0.875rem;">{{ project.template.name }}</strong>
+            <span style="color: var(--fg-dim); font-size: 0.8125rem;"> · {{ project.template.angle.value|title if project.template.angle else 'Exploratory' }} style</span>
+            {% if project.template.description %}
+            <p style="color: var(--fg-muted); font-size: 0.8125rem; margin-top: 0.5rem;">{{ project.template.description }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Public Link Section -->
     <div class="card" style="margin-bottom: 2rem;">
         <div class="section-header">
@@ -444,20 +476,6 @@
                 <button type="submit" class="btn btn-outline btn-sm" style="color: #994444; border-color: #994444;">Disable</button>
             </form>
         </div>
-
-        <!-- Interview Type for Project -->
-        <form method="post" action="/admin/projects/{{ project.id }}/set-template" style="display: flex; align-items: center; gap: 0.75rem;">
-            <label for="template_id" style="font-size: 0.875rem; color: var(--fg-muted); white-space: nowrap;">Interview Type:</label>
-            <select name="template_id" id="template_id" style="flex: 1; max-width: 300px;">
-                <option value="">Custom (generate questions from topic)</option>
-                {% for t in templates %}
-                <option value="{{ t.id }}" {% if project.template_id == t.id %}selected{% endif %}>
-                    {{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %})
-                </option>
-                {% endfor %}
-            </select>
-            <button type="submit" class="btn btn-outline btn-sm">Save</button>
-        </form>
 
         {% else %}
         <form method="post" action="/admin/projects/{{ project.id }}/generate-public-link">

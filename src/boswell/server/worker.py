@@ -81,6 +81,7 @@ async def start_voice_interview(
     angle: str | None = None,
     angle_secondary: str | None = None,
     angle_custom: str | None = None,
+    effective_questions: dict | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict], str | None]:
     """Start a voice interview.
 
@@ -116,8 +117,14 @@ async def start_voice_interview(
     # TODO: Generate proper bot token when creating room
     room_token = interview.room_token or ""
 
-    # Extract questions from project
-    questions = _extract_questions_list(project)
+    # Extract questions - prefer effective_questions from template, then project
+    if effective_questions:
+        # Template questions come as JSONB: {"questions": [{"text": "...", ...}, ...]}
+        questions_data = effective_questions.get("questions", [])
+        questions = [q.get("text", "") for q in questions_data if q.get("text")]
+    else:
+        questions = _extract_questions_list(project)
+
     if not questions:
         logger.warning(
             f"Project {project.id} has no questions, using default greeting"
@@ -361,6 +368,11 @@ async def run_interview_task(interview_id: UUID) -> None:
             # Get effective config (resolves interview vs template values)
             config = get_effective_interview_config(interview, template)
 
+            # Get effective questions (prefer template, then project)
+            effective_questions = None
+            if config["questions"]:
+                effective_questions = config["questions"]
+
             # Resolve angle values
             angle_value = config["angle"].value if config["angle"] else None
             angle_secondary_value = config["angle_secondary"].value if config["angle_secondary"] else None
@@ -394,6 +406,7 @@ async def run_interview_task(interview_id: UUID) -> None:
             angle=angle_value,
             angle_secondary=angle_secondary_value,
             angle_custom=angle_custom_value,
+            effective_questions=effective_questions,
         )
 
         # Save results in a new session
