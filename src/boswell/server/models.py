@@ -166,11 +166,18 @@ class Project(Base):
     public_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Short intro prompt for how Boswell greets guests (e.g., "your experience with our product")
     intro_prompt: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Template to use for public link interviews (content + style)
+    public_template_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("interview_templates.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     team: Mapped["Team"] = relationship("Team", back_populates="projects")
     interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="project", cascade="all, delete-orphan"
+    )
+    public_template: Mapped[Optional["InterviewTemplate"]] = relationship(
+        "InterviewTemplate", foreign_keys=[public_template_id]
     )
 
 
