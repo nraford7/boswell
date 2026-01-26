@@ -507,9 +507,11 @@ async def public_join_landing(
 
     Shows a welcome screen where guest enters their name.
     """
-    # Find project by public_link_token
+    # Find project by public_link_token, with public_template
     result = await db.execute(
-        select(Project).where(Project.public_link_token == token)
+        select(Project)
+        .options(selectinload(Project.public_template))
+        .where(Project.public_link_token == token)
     )
     project = result.scalar_one_or_none()
 
