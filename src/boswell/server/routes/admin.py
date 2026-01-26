@@ -1587,6 +1587,14 @@ async def edit_project_form(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Fetch templates for public link configuration
+    templates_result = await db.execute(
+        select(InterviewTemplate)
+        .where(InterviewTemplate.team_id == user.team_id)
+        .order_by(InterviewTemplate.name)
+    )
+    interview_templates = templates_result.scalars().all()
+
     # Get questions as a list of strings
     questions_list = []
     if project.questions and isinstance(project.questions, dict):
@@ -1604,6 +1612,7 @@ async def edit_project_form(
             "user": user,
             "project": project,
             "questions_text": "\n".join(questions_list),
+            "templates": interview_templates,
         },
     )
 
@@ -1618,6 +1627,7 @@ async def edit_project(
     intro_prompt: str = Form(""),
     research_summary: str = Form(""),
     questions_text: str = Form(""),
+    public_template_id: Optional[str] = Form(None),
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
@@ -1645,6 +1655,23 @@ async def edit_project(
         project.questions = {"questions": [{"text": q} for q in questions_lines]}
     else:
         project.questions = None
+
+    # Handle public_template_id
+    if public_template_id and public_template_id.strip():
+        try:
+            template_uuid = UUID(public_template_id)
+            # Verify template belongs to team
+            template_result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == template_uuid)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            if template_result.scalar_one_or_none() is not None:
+                project.public_template_id = template_uuid
+        except ValueError:
+            pass  # Invalid UUID, ignore
+    else:
+        project.public_template_id = None
 
     await db.commit()
 

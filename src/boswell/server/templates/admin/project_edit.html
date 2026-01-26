@@ -110,6 +110,19 @@
             </div>
 
             <div class="form-section">
+                <h3>Public Link Interview Type</h3>
+                <select name="public_template_id">
+                    <option value="">Default (Project questions, Exploratory)</option>
+                    {% for t in templates %}
+                    <option value="{{ t.id }}" {% if project.public_template_id == t.id %}selected{% endif %}>
+                        {{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %})
+                    </option>
+                    {% endfor %}
+                </select>
+                <p class="help-text">Interview template to use when guests join via the public link.</p>
+            </div>
+
+            <div class="form-section">
                 <h3>Research Summary</h3>
                 <textarea name="research_summary" placeholder="Paste or type background research, context, or materials for the AI interviewer to reference...">{{ project.research_summary or '' }}</textarea>
                 <p class="help-text">This summary helps Boswell understand the context and ask more informed questions.</p>
