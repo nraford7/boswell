@@ -357,6 +357,52 @@ async def disable_public_link(
     )
 
 
+@router.post("/projects/{project_id}/set-public-template")
+async def set_public_template(
+    request: Request,
+    project_id: UUID,
+    public_template_id: Optional[str] = Form(None),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Set the interview template for public links."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Parse and validate template_id
+    if public_template_id and public_template_id.strip():
+        try:
+            template_uuid = UUID(public_template_id)
+            # Verify template belongs to team
+            template_result = await db.execute(
+                select(InterviewTemplate)
+                .where(InterviewTemplate.id == template_uuid)
+                .where(InterviewTemplate.team_id == user.team_id)
+            )
+            template = template_result.scalar_one_or_none()
+            if template is None:
+                raise HTTPException(status_code=404, detail="Template not found")
+            project.public_template_id = template_uuid
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid template ID")
+    else:
+        project.public_template_id = None
+
+    await db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
 # -----------------------------------------------------------------------------
 # Interview Creation Routes
 # -----------------------------------------------------------------------------
