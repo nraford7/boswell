@@ -561,6 +561,7 @@ async def start_public_interview(
         email=None,  # No email for public interviews
         status=InterviewStatus.started,
         started_at=datetime.now(timezone.utc),
+        template_id=project.public_template_id,  # Use project's public template
     )
     db.add(interview)
     await db.flush()  # Get the interview ID
