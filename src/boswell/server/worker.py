@@ -117,7 +117,9 @@ async def start_voice_interview(
     # TODO: Generate proper bot token when creating room
     room_token = interview.room_token or ""
 
-    # Extract questions - prefer effective_questions from template, then project
+    # Extract questions
+    # - If template is set: effective_questions contains template questions or generated questions
+    # - If no template: falls back to project.questions
     if effective_questions:
         # Template questions come as JSONB: {"questions": [{"text": "...", ...}, ...]}
         questions_data = effective_questions.get("questions", [])
@@ -368,10 +370,34 @@ async def run_interview_task(interview_id: UUID) -> None:
             # Get effective config (resolves interview vs template values)
             config = get_effective_interview_config(interview, template)
 
-            # Get effective questions (prefer template, then project)
+            # Get effective questions
+            # Priority: 1) template/interview questions, 2) generate from template research, 3) project questions
             effective_questions = None
             if config["questions"]:
                 effective_questions = config["questions"]
+            elif template:
+                # Template is set but has no pre-written questions
+                # Generate questions using template's research content or project topic
+                research_content = config["research_summary"] or ""
+                try:
+                    from boswell.ingestion import generate_questions
+                    source = "template research" if research_content else "project topic"
+                    logger.info(f"Generating questions from {source} for interview {interview_id}")
+                    questions_list = await asyncio.to_thread(
+                        generate_questions, project.topic, research_content, 12
+                    )
+                    if questions_list:
+                        effective_questions = {
+                            "questions": [
+                                {"text": q, "type": "generated_from_template"}
+                                for q in questions_list
+                            ]
+                        }
+                        logger.info(f"Generated {len(questions_list)} questions from {source} for interview {interview_id}")
+                except ImportError:
+                    logger.warning("Ingestion module not available for question generation")
+                except Exception as e:
+                    logger.warning(f"Failed to generate questions from template: {e}")
 
             # Resolve angle values
             angle_value = config["angle"].value if config["angle"] else None
