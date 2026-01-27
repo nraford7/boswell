@@ -146,7 +146,7 @@ class Project(Base):
         ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    topic: Mapped[str] = mapped_column(String(500), nullable=False)
+    topic: Mapped[str] = mapped_column(Text, nullable=False)
     questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     research_links: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
