@@ -1573,6 +1573,81 @@ async def bulk_followup_interviews(
     return JSONResponse({"created": created_count, "total": len(interview_ids)})
 
 
+@router.get("/projects/{project_id}/transcripts/bulk-download")
+async def bulk_download_transcripts(
+    request: Request,
+    project_id: UUID,
+    ids: str,  # Comma-separated interview IDs
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Download transcripts for selected interviews as JSON."""
+    # Parse comma-separated IDs
+    id_strings = [s.strip() for s in ids.split(",") if s.strip()]
+    if not id_strings:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in id_strings]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch interviews with transcripts
+    result = await db.execute(
+        select(Interview)
+        .options(selectinload(Interview.transcript))
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status == InterviewStatus.completed)
+    )
+    interviews = result.scalars().all()
+
+    # Build download data
+    all_transcripts = []
+    for interview in interviews:
+        if interview.transcript:
+            all_transcripts.append({
+                "interview": {
+                    "id": str(interview.id),
+                    "name": interview.name,
+                    "email": interview.email,
+                    "started_at": interview.started_at.isoformat() if interview.started_at else None,
+                    "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+                },
+                "transcript": interview.transcript.entries or [],
+            })
+
+    if not all_transcripts:
+        raise HTTPException(status_code=404, detail="No transcripts found for selected interviews")
+
+    download_data = {
+        "project": {
+            "id": str(project.id),
+            "topic": project.topic,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "interviews": all_transcripts,
+    }
+
+    filename = f"transcripts-{project.topic.lower().replace(' ', '-')[:30]}-selected.json"
+    return JSONResponse(
+        content=download_data,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
 @router.post("/projects/{project_id}/delete")
 async def delete_project(
     request: Request,
