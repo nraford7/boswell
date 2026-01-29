@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useDaily, useMeetingState, DailyAudio } from '@daily-co/daily-react'
+import { useDaily, useMeetingState, useParticipantIds, DailyAudio } from '@daily-co/daily-react'
 import { LoadingScreen } from './LoadingScreen'
 import { BoswellBranding } from './BoswellBranding'
 // AudioVisualizer disabled - sync latency issues (see comment below)
@@ -13,6 +13,16 @@ interface RoomProps {
 export function Room({ thankYouUrl }: RoomProps) {
   const daily = useDaily()
   const meetingState = useMeetingState()
+  const participantIds = useParticipantIds()
+
+  // Debug: Log participants
+  useEffect(() => {
+    console.log('Participants in room:', participantIds)
+    if (daily) {
+      const participants = daily.participants()
+      console.log('Participant details:', participants)
+    }
+  }, [participantIds, daily])
 
   // Redirect to thank you page when meeting ends
   useEffect(() => {
@@ -48,6 +58,12 @@ export function Room({ thankYouUrl }: RoomProps) {
     )
   }
 
+  // Handle audio playback failures (browser autoplay policy)
+  const handlePlayFailed = (e: unknown) => {
+    console.error('Audio play failed:', e)
+    // Could show a "click to enable audio" button here if needed
+  }
+
   // Main room view
   //
   // AudioVisualizer disabled due to ~2s latency between animation and actual speech.
@@ -60,7 +76,7 @@ export function Room({ thankYouUrl }: RoomProps) {
   //
   return (
     <div className="room">
-      <DailyAudio />
+      <DailyAudio onPlayFailed={handlePlayFailed} />
       <BoswellBranding />
       {/* <AudioVisualizer /> */}
       <Controls />
