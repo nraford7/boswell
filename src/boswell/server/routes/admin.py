@@ -1518,6 +1518,61 @@ async def bulk_remind_interviews(
     return JSONResponse({"sent": sent_count, "total": len(interview_ids)})
 
 
+@router.post("/projects/{project_id}/interviews/bulk-followup")
+async def bulk_followup_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create follow-up interviews for multiple completed interviews."""
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch completed interviews only
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status == InterviewStatus.completed)
+    )
+    interviews = result.scalars().all()
+
+    created_count = 0
+    for original in interviews:
+        followup = Interview(
+            project_id=project_id,
+            email=original.email,
+            name=original.name,
+        )
+        db.add(followup)
+        created_count += 1
+
+    await db.flush()
+
+    logger.info(f"Created {created_count} follow-up interviews for project {project_id}")
+
+    return JSONResponse({"created": created_count, "total": len(interview_ids)})
+
+
 @router.post("/projects/{project_id}/delete")
 async def delete_project(
     request: Request,
