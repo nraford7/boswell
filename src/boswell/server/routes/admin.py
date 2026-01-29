@@ -1410,6 +1410,57 @@ async def delete_interview(
     )
 
 
+@router.post("/projects/{project_id}/interviews/bulk-delete")
+async def bulk_delete_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete multiple interviews at once."""
+    # Parse JSON body
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    # Validate UUIDs
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project to verify ownership
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Delete interviews that belong to this project
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+    )
+    interviews = result.scalars().all()
+
+    deleted_count = 0
+    for interview in interviews:
+        await db.delete(interview)
+        deleted_count += 1
+
+    await db.flush()
+
+    logger.info(f"Bulk deleted {deleted_count} interviews from project {project_id}")
+
+    return JSONResponse({"deleted": deleted_count})
+
+
 @router.post("/projects/{project_id}/delete")
 async def delete_project(
     request: Request,
