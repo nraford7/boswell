@@ -79,6 +79,7 @@ async def create_pipeline(
             transcription_enabled=False,  # We use Deepgram directly
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer(),
+            vad_audio_passthrough=True,  # Required for audio output to work
         ),
     )
 
