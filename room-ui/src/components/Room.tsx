@@ -101,15 +101,27 @@ export function Room({ thankYouUrl }: RoomProps) {
           console.warn('[AUDIO-DEBUG] No audio elements found yet')
         }
 
-        await Promise.all(
-          audioEls.map((el) => {
-            console.log('[AUDIO-DEBUG] Playing audio element:', el)
-            return el.play().catch((err) => {
-              console.error('[AUDIO-DEBUG] Audio element play failed:', err)
-              return undefined
-            })
+        const playPromises = audioEls.map((el) => {
+          console.log('[AUDIO-DEBUG] Playing audio element:', el)
+
+          // Wrap play() with timeout to prevent hanging
+          return Promise.race([
+            el.play().then(() => {
+              console.log('[AUDIO-DEBUG] Audio element played successfully')
+              return true
+            }),
+            new Promise((resolve) => setTimeout(() => {
+              console.warn('[AUDIO-DEBUG] Audio element play timed out after 2s')
+              resolve(false)
+            }, 2000))
+          ]).catch((err) => {
+            console.error('[AUDIO-DEBUG] Audio element play failed:', err)
+            return false
           })
-        )
+        })
+
+        const results = await Promise.all(playPromises)
+        console.log('[AUDIO-DEBUG] Play results:', results)
       }
       console.log('[AUDIO-DEBUG] Setting audioEnabled to true')
       setAudioEnabled(true)
