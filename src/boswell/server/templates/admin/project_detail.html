@@ -818,7 +818,11 @@
 
 <script>
 let currentFilter = 'all';
+let editMode = false;
+let selectedIds = new Set();
+let pendingAction = null;
 
+// Existing filter functions
 function setFilter(filter) {
     currentFilter = filter;
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -847,6 +851,8 @@ function filterTable() {
             row.classList.add('hidden');
         }
     });
+
+    updateActionBar();
 }
 
 function copyLink(link, btn) {
@@ -858,6 +864,217 @@ function copyLink(link, btn) {
             btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>';
         }, 2000);
     });
+}
+
+// Edit mode functions
+function toggleEditMode() {
+    editMode = !editMode;
+    const table = document.getElementById('interviewsTable');
+    const btn = document.getElementById('editModeBtn');
+
+    if (editMode) {
+        table.classList.add('edit-mode');
+        btn.textContent = 'Done';
+        btn.classList.remove('btn-outline');
+    } else {
+        table.classList.remove('edit-mode');
+        btn.textContent = 'Edit';
+        btn.classList.add('btn-outline');
+        clearSelection();
+    }
+}
+
+function toggleSelection(id) {
+    if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+    } else {
+        selectedIds.add(id);
+    }
+    updateRowSelection(id);
+    updateActionBar();
+}
+
+function updateRowSelection(id) {
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if (row) {
+        const checkbox = row.querySelector('.row-checkbox');
+        if (selectedIds.has(id)) {
+            row.classList.add('selected');
+            checkbox.checked = true;
+        } else {
+            row.classList.remove('selected');
+            checkbox.checked = false;
+        }
+    }
+}
+
+function toggleSelectAll() {
+    const checkbox = document.getElementById('selectAllCheckbox');
+    const visibleRows = document.querySelectorAll('#interviewsTable tbody tr:not(.hidden)');
+
+    if (checkbox.checked) {
+        visibleRows.forEach(row => {
+            const id = row.dataset.id;
+            selectedIds.add(id);
+            updateRowSelection(id);
+        });
+    } else {
+        visibleRows.forEach(row => {
+            const id = row.dataset.id;
+            selectedIds.delete(id);
+            updateRowSelection(id);
+        });
+    }
+    updateActionBar();
+}
+
+function clearSelection() {
+    selectedIds.forEach(id => {
+        const row = document.querySelector(`tr[data-id="${id}"]`);
+        if (row) {
+            row.classList.remove('selected');
+            row.querySelector('.row-checkbox').checked = false;
+        }
+    });
+    selectedIds.clear();
+    document.getElementById('selectAllCheckbox').checked = false;
+    updateActionBar();
+}
+
+function updateActionBar() {
+    const bar = document.getElementById('bulkActionBar');
+    const countEl = document.getElementById('selectionCount');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+
+    if (editMode && selectedIds.size > 0) {
+        bar.classList.add('visible');
+        countEl.textContent = `${selectedIds.size} selected`;
+    } else {
+        bar.classList.remove('visible');
+    }
+
+    // Update select all checkbox state
+    const visibleRows = document.querySelectorAll('#interviewsTable tbody tr:not(.hidden)');
+    const visibleIds = Array.from(visibleRows).map(r => r.dataset.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+    const someSelected = visibleIds.some(id => selectedIds.has(id));
+
+    selectAllCheckbox.checked = allSelected;
+    selectAllCheckbox.indeterminate = someSelected && !allSelected;
+}
+
+// Toast
+function showToast(message, duration = 3000) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), duration);
+}
+
+// Modal
+function showModal(title, message, onConfirm) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalMessage').textContent = message;
+    pendingAction = onConfirm;
+    document.getElementById('modalOverlay').classList.add('visible');
+}
+
+function hideModal() {
+    document.getElementById('modalOverlay').classList.remove('visible');
+    pendingAction = null;
+}
+
+function modalConfirm() {
+    if (pendingAction) {
+        pendingAction();
+    }
+    hideModal();
+}
+
+// Bulk actions
+const projectId = '{{ project.id }}';
+
+async function bulkDelete() {
+    const count = selectedIds.size;
+    showModal(
+        'Delete Interviews',
+        `Delete ${count} interview${count > 1 ? 's' : ''}? This cannot be undone.`,
+        async () => {
+            try {
+                const response = await fetch(`/admin/projects/${projectId}/interviews/bulk-delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interview_ids: Array.from(selectedIds) })
+                });
+                const data = await response.json();
+                showToast(`Deleted ${data.deleted} interview${data.deleted > 1 ? 's' : ''}`);
+                setTimeout(() => location.reload(), 1000);
+            } catch (e) {
+                showToast('Error deleting interviews');
+            }
+        }
+    );
+}
+
+async function bulkRemind() {
+    try {
+        const response = await fetch(`/admin/projects/${projectId}/interviews/bulk-remind`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interview_ids: Array.from(selectedIds) })
+        });
+        const data = await response.json();
+        if (data.sent > 0) {
+            showToast(`Sent reminders to ${data.sent} of ${data.total} selected`);
+        } else {
+            showToast('No interviews eligible for reminders');
+        }
+    } catch (e) {
+        showToast('Error sending reminders');
+    }
+}
+
+async function bulkFollowup() {
+    try {
+        const response = await fetch(`/admin/projects/${projectId}/interviews/bulk-followup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interview_ids: Array.from(selectedIds) })
+        });
+        const data = await response.json();
+        if (data.created > 0) {
+            showToast(`Created ${data.created} follow-up interview${data.created > 1 ? 's' : ''}`);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('No completed interviews selected');
+        }
+    } catch (e) {
+        showToast('Error creating follow-ups');
+    }
+}
+
+function bulkDownload() {
+    // Check how many have transcripts
+    const rows = Array.from(selectedIds).map(id => document.querySelector(`tr[data-id="${id}"]`));
+    const withTranscripts = rows.filter(r => r && r.dataset.hasTranscript === 'true').length;
+    const total = selectedIds.size;
+
+    if (withTranscripts === 0) {
+        showToast('None of the selected interviews have transcripts');
+        return;
+    }
+
+    if (withTranscripts < total) {
+        showModal(
+            'Download Transcripts',
+            `Only ${withTranscripts} of ${total} selected interviews have transcripts. Download anyway?`,
+            () => {
+                window.location.href = `/admin/projects/${projectId}/transcripts/bulk-download?ids=${Array.from(selectedIds).join(',')}`;
+            }
+        );
+    } else {
+        window.location.href = `/admin/projects/${projectId}/transcripts/bulk-download?ids=${Array.from(selectedIds).join(',')}`;
+    }
 }
 </script>
 {% endblock %}
