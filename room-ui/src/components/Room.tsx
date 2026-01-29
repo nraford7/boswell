@@ -81,22 +81,41 @@ export function Room({ thankYouUrl }: RoomProps) {
   }, [daily])
 
   const startAudioPlayback = async () => {
+    console.log('[AUDIO-DEBUG] startAudioPlayback called')
     if (!daily) {
+      console.error('[AUDIO-DEBUG] No daily instance')
       return
     }
     try {
+      // Check if daily.startAudio exists
       if (typeof (daily as { startAudio?: () => Promise<void> }).startAudio === 'function') {
+        console.log('[AUDIO-DEBUG] Calling daily.startAudio()')
         await (daily as { startAudio?: () => Promise<void> }).startAudio?.()
+        console.log('[AUDIO-DEBUG] daily.startAudio() completed')
       } else {
+        console.log('[AUDIO-DEBUG] daily.startAudio not available, falling back to audio elements')
         const audioEls = Array.from(document.querySelectorAll('audio'))
+        console.log('[AUDIO-DEBUG] Found audio elements:', audioEls.length)
+
+        if (audioEls.length === 0) {
+          console.warn('[AUDIO-DEBUG] No audio elements found yet')
+        }
+
         await Promise.all(
-          audioEls.map((el) => el.play().catch(() => undefined))
+          audioEls.map((el) => {
+            console.log('[AUDIO-DEBUG] Playing audio element:', el)
+            return el.play().catch((err) => {
+              console.error('[AUDIO-DEBUG] Audio element play failed:', err)
+              return undefined
+            })
+          })
         )
       }
+      console.log('[AUDIO-DEBUG] Setting audioEnabled to true')
       setAudioEnabled(true)
       setAudioError(null)
     } catch (err) {
-      console.error('Audio start failed:', err)
+      console.error('[AUDIO-DEBUG] Audio start failed:', err)
       setAudioError('Click to enable audio')
     }
   }
