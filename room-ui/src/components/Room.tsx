@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useDaily, useMeetingState, useParticipantIds, DailyAudio } from '@daily-co/daily-react'
 import { LoadingScreen } from './LoadingScreen'
 import { BoswellBranding } from './BoswellBranding'
@@ -14,6 +14,8 @@ export function Room({ thankYouUrl }: RoomProps) {
   const daily = useDaily()
   const meetingState = useMeetingState()
   const participantIds = useParticipantIds()
+  const [audioEnabled, setAudioEnabled] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
 
   // Debug: Log participants
   useEffect(() => {
@@ -38,6 +40,34 @@ export function Room({ thankYouUrl }: RoomProps) {
     }
   }, [daily, meetingState])
 
+  const startAudioPlayback = async () => {
+    if (!daily) {
+      return
+    }
+    try {
+      if (typeof (daily as { startAudio?: () => Promise<void> }).startAudio === 'function') {
+        await (daily as { startAudio?: () => Promise<void> }).startAudio?.()
+      } else {
+        const audioEls = Array.from(document.querySelectorAll('audio'))
+        await Promise.all(
+          audioEls.map((el) => el.play().catch(() => undefined))
+        )
+      }
+      setAudioEnabled(true)
+      setAudioError(null)
+    } catch (err) {
+      console.error('Audio start failed:', err)
+      setAudioError('Click to enable audio')
+    }
+  }
+
+  // Attempt to start audio once joined; browsers may still require a gesture.
+  useEffect(() => {
+    if (daily && meetingState === 'joined-meeting' && !audioEnabled) {
+      startAudioPlayback().catch(() => undefined)
+    }
+  }, [daily, meetingState, audioEnabled])
+
   // Loading state
   if (meetingState === 'joining-meeting' || meetingState === 'new') {
     return <LoadingScreen />
@@ -61,7 +91,7 @@ export function Room({ thankYouUrl }: RoomProps) {
   // Handle audio playback failures (browser autoplay policy)
   const handlePlayFailed = (e: unknown) => {
     console.error('Audio play failed:', e)
-    // Could show a "click to enable audio" button here if needed
+    setAudioError('Click to enable audio')
   }
 
   // Main room view
@@ -80,6 +110,18 @@ export function Room({ thankYouUrl }: RoomProps) {
       <BoswellBranding />
       {/* <AudioVisualizer /> */}
       <Controls />
+      {!audioEnabled && meetingState === 'joined-meeting' ? (
+        <div className="audio-gate">
+          <div className="audio-gate-card">
+            <h2>Enable audio</h2>
+            <p>Click to allow your browser to play the interview audio.</p>
+            <button className="audio-gate-btn" onClick={startAudioPlayback}>
+              Enable Audio
+            </button>
+            {audioError ? <p className="audio-gate-error">{audioError}</p> : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
