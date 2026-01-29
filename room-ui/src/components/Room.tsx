@@ -125,12 +125,8 @@ export function Room({ thankYouUrl }: RoomProps) {
     })
   }
 
-  // Attempt to start audio once joined; browsers may still require a gesture.
-  useEffect(() => {
-    if (daily && meetingState === 'joined-meeting' && !audioEnabled) {
-      startAudioPlayback()
-    }
-  }, [daily, meetingState, audioEnabled])
+  // NOTE: Don't attempt automatic audio playback - browser autoplay policies
+  // require user interaction. The modal will prompt for a click gesture.
 
   // Loading state
   if (meetingState === 'joining-meeting' || meetingState === 'new') {
