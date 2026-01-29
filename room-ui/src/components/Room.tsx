@@ -17,12 +17,25 @@ export function Room({ thankYouUrl }: RoomProps) {
   const [audioEnabled, setAudioEnabled] = useState(false)
   const [audioError, setAudioError] = useState<string | null>(null)
 
-  // Debug: Log participants
+  // Debug: Log participants and track subscription status
   useEffect(() => {
     console.log('Participants in room:', participantIds)
     if (daily) {
       const participants = daily.participants()
       console.log('Participant details:', participants)
+
+      // Log track subscription details for each participant
+      Object.values(participants).forEach((p) => {
+        console.log(`[AUDIO-DEBUG] Participant ${p.user_name || p.session_id}:`, {
+          local: p.local,
+          audioTrack: p.tracks.audio,
+          audioSubscribed: p.tracks.audio.subscribed,
+          audioState: p.tracks.audio.state,
+        })
+      })
+
+      // Log Daily.co configuration
+      console.log('[AUDIO-DEBUG] subscribeToTracksAutomatically:', daily.subscribeToTracksAutomatically())
     }
   }, [participantIds, daily])
 
@@ -39,6 +52,33 @@ export function Room({ thankYouUrl }: RoomProps) {
       daily.join()
     }
   }, [daily, meetingState])
+
+  // Listen for track events to debug audio issues
+  useEffect(() => {
+    if (!daily) return
+
+    const handleTrackStarted = (e: any) => {
+      console.log('[AUDIO-DEBUG] track-started:', e)
+    }
+
+    const handleParticipantUpdated = (e: any) => {
+      if (e.participant?.tracks?.audio) {
+        console.log('[AUDIO-DEBUG] participant-updated with audio:', {
+          participant: e.participant.user_name || e.participant.session_id,
+          audioSubscribed: e.participant.tracks.audio.subscribed,
+          audioState: e.participant.tracks.audio.state,
+        })
+      }
+    }
+
+    daily.on('track-started', handleTrackStarted)
+    daily.on('participant-updated', handleParticipantUpdated)
+
+    return () => {
+      daily.off('track-started', handleTrackStarted)
+      daily.off('participant-updated', handleParticipantUpdated)
+    }
+  }, [daily])
 
   const startAudioPlayback = async () => {
     if (!daily) {
@@ -106,7 +146,10 @@ export function Room({ thankYouUrl }: RoomProps) {
   //
   return (
     <div className="room">
-      <DailyAudio onPlayFailed={handlePlayFailed} />
+      <DailyAudio
+        onPlayFailed={handlePlayFailed}
+        autoSubscribeActiveSpeaker={true}
+      />
       <BoswellBranding />
       {/* <AudioVisualizer /> */}
       <Controls />

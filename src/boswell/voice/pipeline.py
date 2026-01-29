@@ -1,8 +1,11 @@
 """Pipecat pipeline setup for Boswell voice interviews."""
 
+import logging
 from typing import Any, Callable
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+
+logger = logging.getLogger(__name__)
 from pipecat.frames.frames import EndFrame
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContextFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -19,6 +22,7 @@ from boswell.voice.acknowledgment import AcknowledgmentProcessor
 from boswell.voice.mode_detection import ModeDetectionProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
 from boswell.voice.strike_control import StrikeControlProcessor
+from boswell.voice.audio_diagnostics import AudioDiagnosticsProcessor
 # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency issues
 # from boswell.voice.speaking_state import SpeakingStateProcessor
 
@@ -81,6 +85,10 @@ async def create_pipeline(
             vad_analyzer=SileroVADAnalyzer(),
             vad_audio_passthrough=True,  # Required for audio output to work
         ),
+    )
+    logger.info(
+        f"[AUDIO-DIAG] Daily transport configured: "
+        f"audio_in={True}, audio_out={True}, vad_passthrough={True}"
     )
 
     # Set up STT (Speech-to-Text) with Deepgram
@@ -145,11 +153,14 @@ async def create_pipeline(
     # Set up mode detection for returning guests
     mode_detection_processor = ModeDetectionProcessor()
 
+    # Set up audio diagnostics for debugging
+    audio_diagnostics = AudioDiagnosticsProcessor()
+
     # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency
     # speaking_state_processor = SpeakingStateProcessor()
 
     # Build the pipeline
-    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> strike -> speed -> bot_collector -> tts -> output
+    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> strike -> speed -> bot_collector -> tts -> [DIAGNOSTICS] -> output
     pipeline = Pipeline(
         [
             transport.input(),
@@ -163,6 +174,7 @@ async def create_pipeline(
             mode_detection_processor,  # Detect mode tags for returning guests
             bot_response_collector,  # Capture bot responses after LLM
             tts,
+            audio_diagnostics,  # DEBUG: Log audio frames before output
             # speaking_state_processor,  # Disabled - latency issues
             transport.output(),
             context_aggregator.assistant(),
