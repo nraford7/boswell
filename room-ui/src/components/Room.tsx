@@ -80,62 +80,55 @@ export function Room({ thankYouUrl }: RoomProps) {
     }
   }, [daily])
 
-  const startAudioPlayback = async () => {
+  const startAudioPlayback = () => {
     console.log('[AUDIO-DEBUG] startAudioPlayback called')
     if (!daily) {
       console.error('[AUDIO-DEBUG] No daily instance')
       return
     }
-    try {
-      // Check if daily.startAudio exists
-      if (typeof (daily as { startAudio?: () => Promise<void> }).startAudio === 'function') {
-        console.log('[AUDIO-DEBUG] Calling daily.startAudio()')
-        await (daily as { startAudio?: () => Promise<void> }).startAudio?.()
-        console.log('[AUDIO-DEBUG] daily.startAudio() completed')
-      } else {
-        console.log('[AUDIO-DEBUG] daily.startAudio not available, falling back to audio elements')
-        const audioEls = Array.from(document.querySelectorAll('audio'))
-        console.log('[AUDIO-DEBUG] Found audio elements:', audioEls.length)
 
-        if (audioEls.length === 0) {
-          console.warn('[AUDIO-DEBUG] No audio elements found yet')
-        }
+    // CRITICAL: Call audio.play() synchronously to preserve user gesture
+    const audioEls = Array.from(document.querySelectorAll('audio'))
+    console.log('[AUDIO-DEBUG] Found audio elements:', audioEls.length)
 
-        const playPromises = audioEls.map((el) => {
-          console.log('[AUDIO-DEBUG] Playing audio element:', el)
-
-          // Wrap play() with timeout to prevent hanging
-          return Promise.race([
-            el.play().then(() => {
-              console.log('[AUDIO-DEBUG] Audio element played successfully')
-              return true
-            }),
-            new Promise((resolve) => setTimeout(() => {
-              console.warn('[AUDIO-DEBUG] Audio element play timed out after 2s')
-              resolve(false)
-            }, 2000))
-          ]).catch((err) => {
-            console.error('[AUDIO-DEBUG] Audio element play failed:', err)
-            return false
-          })
-        })
-
-        const results = await Promise.all(playPromises)
-        console.log('[AUDIO-DEBUG] Play results:', results)
-      }
-      console.log('[AUDIO-DEBUG] Setting audioEnabled to true')
-      setAudioEnabled(true)
-      setAudioError(null)
-    } catch (err) {
-      console.error('[AUDIO-DEBUG] Audio start failed:', err)
-      setAudioError('Click to enable audio')
+    if (audioEls.length === 0) {
+      console.warn('[AUDIO-DEBUG] No audio elements found yet')
+      setAudioEnabled(true) // Close modal anyway
+      return
     }
+
+    // Start all audio elements playing SYNCHRONOUSLY
+    const playPromises = audioEls.map((el) => {
+      console.log('[AUDIO-DEBUG] Playing audio element:', el)
+      // Call play() immediately (synchronously) to preserve user gesture
+      const playPromise = el.play()
+
+      // Handle the promise asynchronously after starting playback
+      return playPromise.then(() => {
+        console.log('[AUDIO-DEBUG] Audio element played successfully')
+        return true
+      }).catch((err) => {
+        console.error('[AUDIO-DEBUG] Audio element play failed:', err)
+        return false
+      })
+    })
+
+    // Close the modal immediately since we've initiated playback
+    setAudioEnabled(true)
+    setAudioError(null)
+
+    // Track results asynchronously without blocking
+    Promise.all(playPromises).then((results) => {
+      console.log('[AUDIO-DEBUG] Play results:', results)
+      const successCount = results.filter(r => r).length
+      console.log(`[AUDIO-DEBUG] ${successCount}/${results.length} audio elements played`)
+    })
   }
 
   // Attempt to start audio once joined; browsers may still require a gesture.
   useEffect(() => {
     if (daily && meetingState === 'joined-meeting' && !audioEnabled) {
-      startAudioPlayback().catch(() => undefined)
+      startAudioPlayback()
     }
   }, [daily, meetingState, audioEnabled])
 
