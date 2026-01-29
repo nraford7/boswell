@@ -104,6 +104,7 @@ async def create_pipeline(
         api_key=config.elevenlabs_api_key,
         voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel - calm, natural voice
         model="eleven_turbo_v2",  # Fast model for low latency
+        sample_rate=16000,  # Match Daily.co's 16kHz voice sample rate
     )
 
     # Set up LLM with Claude

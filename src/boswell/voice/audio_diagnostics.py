@@ -63,7 +63,9 @@ class AudioDiagnosticsProcessor(FrameProcessor):
                     f"{audio_bytes} bytes (total: {self._total_audio_bytes:,} bytes)"
                 )
 
-        # Always pass frames through
+        # CRITICAL: Handle system frames (StartFrame, etc.) via parent class
+        await super().process_frame(frame, direction)
+        # Forward all frames to next processor
         await self.push_frame(frame, direction)
 
     def get_stats(self) -> dict:
