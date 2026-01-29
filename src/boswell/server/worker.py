@@ -9,10 +9,12 @@ When the interview completes, it saves the transcript and updates the interview 
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -30,6 +32,53 @@ from boswell.voice.pipeline import run_interview
 from boswell.voice.prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
+
+DAILY_API_URL = "https://api.daily.co/v1"
+
+
+async def create_bot_token(room_name: str, bot_name: str = "Boswell") -> str:
+    """Create a Daily.co meeting token for the bot.
+
+    Args:
+        room_name: The Daily room name.
+        bot_name: Display name for the bot.
+
+    Returns:
+        The meeting token string.
+
+    Raises:
+        RuntimeError: If token creation fails.
+    """
+    daily_api_key = os.environ.get("DAILY_API_KEY")
+    if not daily_api_key:
+        raise RuntimeError("DAILY_API_KEY environment variable not set")
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{DAILY_API_URL}/meeting-tokens",
+            headers={
+                "Authorization": f"Bearer {daily_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "properties": {
+                    "room_name": room_name,
+                    "is_owner": True,  # Bot needs owner permissions for audio
+                    "user_name": bot_name,
+                    "start_video_off": True,
+                    "start_audio_off": False,
+                    "exp": int(time.time()) + 7200,  # 2 hours
+                },
+            },
+        )
+
+        if response.status_code not in (200, 201):
+            error_text = response.text
+            logger.error(f"Failed to create bot token: {error_text}")
+            raise RuntimeError(f"Failed to create bot token: {error_text}")
+
+        token_data = response.json()
+        return token_data["token"]
 
 
 def get_effective_interview_config(interview, template):
@@ -110,12 +159,9 @@ async def start_voice_interview(
     daily_domain = os.environ.get("DAILY_DOMAIN", "emirbot")
     room_url = f"https://{daily_domain}.daily.co/{interview.room_name}"
 
-    # Get the bot token (stored in interview.room_token)
-    # Note: In current implementation, room_token is an interview token
-    # We need a bot token for the pipeline
-    # For now, we'll use the interview token as a placeholder
-    # TODO: Generate proper bot token when creating room
-    room_token = interview.room_token or ""
+    # Create a fresh bot token with owner permissions
+    # The bot needs its own token separate from the guest's token
+    room_token = await create_bot_token(interview.room_name, "Boswell")
 
     # Extract questions
     # - If template is set: effective_questions contains template questions or generated questions
