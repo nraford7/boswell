@@ -332,6 +332,31 @@
     .interviews-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
 
     .interviews-table tbody tr.hidden { display: none; }
+
+    /* Edit mode styles */
+    .checkbox-col {
+        width: 40px;
+        display: none;
+    }
+
+    .edit-mode .checkbox-col {
+        display: table-cell;
+    }
+
+    .edit-mode .actions-cell {
+        display: none;
+    }
+
+    .row-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: var(--accent);
+    }
+
+    .interviews-table tr.selected {
+        background: var(--accent-subtle);
+    }
 </style>
 {% endblock %}
 
@@ -564,6 +589,9 @@
         <table class="interviews-table" id="interviewsTable">
             <thead>
                 <tr>
+                    <th class="checkbox-col">
+                        <input type="checkbox" class="row-checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                    </th>
                     <th>Interviewee</th>
                     <th>Status</th>
                     <th>Invitation Link</th>
@@ -573,7 +601,10 @@
             </thead>
             <tbody>
                 {% for interview in interviews %}
-                <tr data-status="{{ interview.status.value }}" data-name="{{ interview.name|lower }}">
+                <tr data-status="{{ interview.status.value }}" data-name="{{ interview.name|lower }}" data-id="{{ interview.id }}" data-has-transcript="{{ 'true' if interview.transcript else 'false' }}">
+                    <td class="checkbox-col">
+                        <input type="checkbox" class="row-checkbox" onchange="toggleSelection('{{ interview.id }}')">
+                    </td>
                     <td>
                         <div class="interview-info">
                             <span class="interview-name">{{ interview.name }}</span>
