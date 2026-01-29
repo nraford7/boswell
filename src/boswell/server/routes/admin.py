@@ -1410,6 +1410,244 @@ async def delete_interview(
     )
 
 
+@router.post("/projects/{project_id}/interviews/bulk-delete")
+async def bulk_delete_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete multiple interviews at once."""
+    # Parse JSON body
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    # Validate UUIDs
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project to verify ownership
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Delete interviews that belong to this project
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+    )
+    interviews = result.scalars().all()
+
+    deleted_count = 0
+    for interview in interviews:
+        await db.delete(interview)
+        deleted_count += 1
+
+    await db.flush()
+
+    logger.info(f"Bulk deleted {deleted_count} interviews from project {project_id}")
+
+    return JSONResponse({"deleted": deleted_count})
+
+
+@router.post("/projects/{project_id}/interviews/bulk-remind")
+async def bulk_remind_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Send reminder emails to multiple interviews."""
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch eligible interviews (invited or started, with email)
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status.in_([InterviewStatus.invited, InterviewStatus.started]))
+        .where(Interview.email.isnot(None))
+    )
+    interviews = result.scalars().all()
+
+    settings = get_settings()
+    sent_count = 0
+    for interview in interviews:
+        if interview.email:
+            magic_link = f"{settings.base_url}/i/{interview.magic_token}"
+            await send_invitation_email(
+                to=interview.email,
+                guest_name=interview.name,
+                interview_topic=project.topic,
+                magic_link=magic_link,
+            )
+            sent_count += 1
+
+    logger.info(f"Sent {sent_count} reminder emails for project {project_id}")
+
+    return JSONResponse({"sent": sent_count, "total": len(interview_ids)})
+
+
+@router.post("/projects/{project_id}/interviews/bulk-followup")
+async def bulk_followup_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create follow-up interviews for multiple completed interviews."""
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch completed interviews only
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status == InterviewStatus.completed)
+    )
+    interviews = result.scalars().all()
+
+    created_count = 0
+    for original in interviews:
+        followup = Interview(
+            project_id=project_id,
+            email=original.email,
+            name=original.name,
+        )
+        db.add(followup)
+        created_count += 1
+
+    await db.flush()
+
+    logger.info(f"Created {created_count} follow-up interviews for project {project_id}")
+
+    return JSONResponse({"created": created_count, "total": len(interview_ids)})
+
+
+@router.get("/projects/{project_id}/transcripts/bulk-download")
+async def bulk_download_transcripts(
+    request: Request,
+    project_id: UUID,
+    ids: str,  # Comma-separated interview IDs
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Download transcripts for selected interviews as JSON."""
+    # Parse comma-separated IDs
+    id_strings = [s.strip() for s in ids.split(",") if s.strip()]
+    if not id_strings:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in id_strings]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch interviews with transcripts
+    result = await db.execute(
+        select(Interview)
+        .options(selectinload(Interview.transcript))
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status == InterviewStatus.completed)
+    )
+    interviews = result.scalars().all()
+
+    # Build download data
+    all_transcripts = []
+    for interview in interviews:
+        if interview.transcript:
+            all_transcripts.append({
+                "interview": {
+                    "id": str(interview.id),
+                    "name": interview.name,
+                    "email": interview.email,
+                    "started_at": interview.started_at.isoformat() if interview.started_at else None,
+                    "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+                },
+                "transcript": interview.transcript.entries or [],
+            })
+
+    if not all_transcripts:
+        raise HTTPException(status_code=404, detail="No transcripts found for selected interviews")
+
+    download_data = {
+        "project": {
+            "id": str(project.id),
+            "topic": project.topic,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "interviews": all_transcripts,
+    }
+
+    filename = f"transcripts-{project.topic.lower().replace(' ', '-')[:30]}-selected.json"
+    return JSONResponse(
+        content=download_data,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
 @router.post("/projects/{project_id}/delete")
 async def delete_project(
     request: Request,
