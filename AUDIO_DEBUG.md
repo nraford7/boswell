@@ -1,242 +1,164 @@
-# Audio Debugging - Systematic Investigation
+# Audio Pipeline Debug - Final Report
 
-## Problem Statement
-Audio from the voice agent (bot) is not playing in the interview room, despite:
-- Bot joining the room successfully
-- Bot speaking events firing ("Bot started speaking", "Bot stopped speaking")
-- ElevenLabs TTS generating audio
-- Pipeline configured correctly with `vad_audio_passthrough=True`
+**Date:** January 29, 2026
+**Status:** ✅ RESOLVED
+**Root Cause:** Incorrect `FrameProcessor` pattern in `AudioDiagnosticsProcessor`
 
-## Root Cause Investigation (Phase 1)
+---
 
-### Evidence Gathered
+## Problem Summary
 
-#### Server-Side (Pipeline)
-1. ✅ **Daily Transport Configuration** (pipeline.py:72-84)
-   - `audio_out_enabled=True`
-   - `vad_audio_passthrough=True` (added in commit 7759128)
-   - Bot joins with owner token (`is_owner=True`)
+Bot audio was not playing for guests in interview rooms despite:
+- ElevenLabs TTS responding successfully (TTFB ~0.2s)
+- Server logs showing 7+ MB of audio data "sent"
+- Daily.co WebRTC connection stable (0% packet loss)
+- Client showing track subscribed and playable
 
-2. ✅ **Audio Pipeline Flow** (pipeline.py:153-170)
-   ```
-   TTS → AudioDiagnostics → DailyOutputTransport
-   ```
+Web Audio API analysis confirmed the audio stream contained **digital silence** (all samples at 128, the PCM center value).
 
-3. ⚠️ **ElevenLabs WebSocket Instability**
-   - Logs show: "connection closed, but with an error: no close frame received or sent"
-   - Service reconnects but may be losing audio frames
+---
 
-4. ⚠️ **Very Short Speaking Duration**
-   - Bot speaking events only ~800ms apart
-   - Suggests audio might not be fully transmitted OR client not receiving
+## Root Cause
 
-#### Client-Side (room-ui)
-1. ✅ **Audio Gate Implemented** (Room.tsx:113-124)
-   - Click-to-enable modal handles browser autoplay policy
-   - Calls `daily.startAudio()` or falls back to `audio.play()`
+The `AudioDiagnosticsProcessor` was using an incorrect pattern for Pipecat's `FrameProcessor`:
 
-2. ⚠️ **DailyAudio Component** (Room.tsx:109)
-   - Uses `<DailyAudio>` component to handle audio playback
-   - **Missing**: `autoSubscribeActiveSpeaker` prop (defaults to `false`)
-   - **Issue**: Component only subscribes to tracks if either:
-     - `autoSubscribeActiveSpeaker=true`, OR
-     - Daily instance has `subscribeToTracksAutomatically()=true`
+**Broken code:**
+```python
+async def process_frame(self, frame: Frame, direction: FrameDirection):
+    # ... logging logic ...
 
-3. ⚠️ **No Explicit Track Subscription**
-   - No calls to `daily.updateParticipant()` with `setSubscribedTracks`
-   - Relying on Daily.co defaults
-
-## Root Cause Hypothesis
-
-**Primary Hypothesis**: The `DailyAudio` component is not subscribing to the bot participant's audio track.
-
-**Why**:
-- The `DailyAudio` component in @daily-co/daily-react only renders audio elements for **subscribed** tracks
-- If `autoSubscribeActiveSpeaker=false` (default) AND `subscribeToTracksAutomatically()=false`, tracks are never subscribed
-- Even if `subscribeToTracksAutomatically()=true` (Daily.co default), there may be a timing issue where the bot joins before the client is ready
-
-**Evidence from DailyAudio source** (node_modules/@daily-co/daily-react/src/components/DailyAudio.tsx:162-177):
-```typescript
-if (!isSubscribed(sessionId)) {
-  if (
-    daily &&
-    !daily.isDestroyed() &&
-    autoSubscribeActiveSpeaker &&  // ← defaults to FALSE
-    !daily.subscribeToTracksAutomatically()
-  ) {
-    daily.updateParticipant(sessionId, {
-      setSubscribedTracks: { audio: true },
-    });
-  } else {
-    return;  // ← SKIPS rendering audio element
-  }
-}
+    # WRONG: Only pushing frames, not handling system frames
+    await self.push_frame(frame, direction)
 ```
 
-## Changes Made for Testing
+This caused `StartFrame` to not be properly handled, which resulted in Pipecat's base `FrameProcessor` class rejecting all subsequent frames with the error:
 
-### 1. Server-Side Diagnostics (NEW)
-
-**File**: `src/boswell/voice/audio_diagnostics.py`
-- Created `AudioDiagnosticsProcessor` to log frame flow
-- Tracks:
-  - Text frames from LLM
-  - TTS started/stopped events
-  - Audio raw frames (with byte counts)
-
-**Modified**: `src/boswell/voice/pipeline.py`
-- Added `AudioDiagnosticsProcessor` before `transport.output()`
-- Added logging for Daily transport configuration
-- Pipeline now: `tts → audio_diagnostics → transport.output()`
-
-**Expected Output**:
 ```
-[AUDIO-DIAG] Daily transport configured: audio_in=True, audio_out=True, vad_passthrough=True
-[AUDIO-DIAG] TextFrame #1: 'Hello, I'm Boswell...'
-[AUDIO-DIAG] TTSStartedFrame #1
-[AUDIO-DIAG] AudioRawFrame #10: 3840 bytes (total: 38,400 bytes)
-[AUDIO-DIAG] TTSStoppedFrame #1
+ERROR | AudioDiagnosticsProcessor#13 Trying to process UserAudioRawFrame but StartFrame not received yet
 ```
 
-### 2. Client-Side Diagnostics (MODIFIED)
+---
 
-**File**: `room-ui/src/components/Room.tsx`
+## Solution
 
-**Changes**:
-1. **Added `autoSubscribeActiveSpeaker={true}`** to `<DailyAudio>` (line 109-112)
-   - Forces subscription to active speaker's audio even if `subscribeToTracksAutomatically=false`
+The correct Pipecat `FrameProcessor` pattern requires **both** steps:
 
-2. **Enhanced participant logging** (lines 20-34)
-   - Logs track subscription status for each participant
-   - Logs `subscribeToTracksAutomatically()` setting
-   - Shows audio track state (subscribed, state)
+```python
+async def process_frame(self, frame: Frame, direction: FrameDirection):
+    # ... logging logic ...
 
-3. **Added track event listeners** (lines 49-75)
-   - Logs `track-started` events
-   - Logs `participant-updated` events with audio status
-   - Helps identify when tracks are added/subscribed
+    # 1. Handle system frames (StartFrame, EndFrame, etc.)
+    await super().process_frame(frame, direction)
 
-**Expected Output**:
-```
-[AUDIO-DEBUG] Participant Boswell: {
-  local: false,
-  audioTrack: { subscribed: true, state: 'playable' },
-  audioSubscribed: true,
-  audioState: 'playable'
-}
-[AUDIO-DEBUG] subscribeToTracksAutomatically: true
-[AUDIO-DEBUG] track-started: { participant: { ... }, track: 'audio' }
-[AUDIO-DEBUG] participant-updated with audio: {
-  participant: 'Boswell',
-  audioSubscribed: true,
-  audioState: 'playable'
-}
+    # 2. Forward all frames to next processor
+    await self.push_frame(frame, direction)
 ```
 
-## Testing Instructions
+---
 
-### 1. Start the Server & Worker
+## Debugging Methodology
 
-Terminal 1 (Web):
-```bash
-cd /Users/noahraford/Projects/boswell
-uv run python -m boswell.server.main
+Used isolated pipeline testing to identify the exact failure point:
+
+| Phase | Pipeline Configuration | Result |
+|-------|----------------------|--------|
+| 1 | `TTS → transport.output()` | ✅ Audio works |
+| 2 | `transport.input() → TTS → transport.output()` | ✅ Audio works |
+| 3 | `transport.input() → TTS → BrokenProcessor → transport.output()` | ❌ Silent |
+| 4 | Same as 3, but processor only calls `super().process_frame()` | ❌ Silent (frames not forwarded) |
+| 5 | Same as 3, but processor calls both `super()` AND `push_frame()` | ✅ Audio works |
+
+This systematic approach proved the issue was specifically in the custom processor's frame handling pattern.
+
+---
+
+## Files Changed
+
+### Server-side fix
+**`src/boswell/voice/audio_diagnostics.py`**
+```diff
+-        await self.push_frame(frame, direction)
++        await super().process_frame(frame, direction)
++        await self.push_frame(frame, direction)
 ```
 
-Terminal 2 (Worker):
-```bash
-cd /Users/noahraford/Projects/boswell
-uv run python -m boswell.server.worker
+### Client-side cleanup
+**`room-ui/src/components/Room.tsx`**
+- Removed "Enable Audio" button/modal (was added during debugging)
+- Removed debug console logging
+- Removed unused state variables
+
+---
+
+## Verification
+
+After deploying the fix:
+1. ElevenLabs TTFB: ~0.2-0.4s (excellent)
+2. Audio frames flow through pipeline correctly
+3. Guests hear Boswell speak in interview rooms
+4. No more `StartFrame not received` errors in logs
+
+---
+
+## Lessons Learned
+
+### Pipecat FrameProcessor Pattern
+
+When creating custom `FrameProcessor` subclasses in Pipecat:
+
+```python
+class MyProcessor(FrameProcessor):
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        # 1. Your custom logic here (logging, transformation, etc.)
+        if isinstance(frame, SomeFrameType):
+            # do something
+
+        # 2. ALWAYS call super() to handle system frames
+        await super().process_frame(frame, direction)
+
+        # 3. ALWAYS push frames to continue pipeline flow
+        await self.push_frame(frame, direction)
 ```
 
-### 2. Start an Interview
+**Why both are needed:**
+- `super().process_frame()` - Handles `StartFrame`, `EndFrame`, `InterruptionFrame`, and other system frames that control processor lifecycle
+- `self.push_frame()` - Forwards the frame to the next processor in the pipeline
 
-1. Navigate to admin dashboard: `http://localhost:8000/admin`
-2. Create or select a project with questions
-3. Add a guest and start interview
-4. Click the guest interview link to join the room
-5. Click "Enable Audio" when prompted
+**Skipping either causes failure:**
+- Without `super()`: System frames not handled → processor rejects all frames
+- Without `push_frame()`: Frames not forwarded → pipeline stops flowing
 
-### 3. Check Server Logs
+### Other Boswell Processors
 
-Look for:
-- ✅ `[AUDIO-DIAG] Daily transport configured: audio_in=True, audio_out=True, vad_passthrough=True`
-- ✅ `[AUDIO-DIAG] TextFrame #N: '...'` (LLM is generating responses)
-- ✅ `[AUDIO-DIAG] TTSStartedFrame #N` (TTS is starting)
-- ✅ `[AUDIO-DIAG] AudioRawFrame #N: X bytes` (Audio is being generated)
-- ❌ ElevenLabs websocket errors (indicates TTS instability)
+All other Boswell processors (`AcknowledgmentProcessor`, `StrikeControlProcessor`, `SpeedControlProcessor`, `ModeDetectionProcessor`, `TranscriptCollector`, `BotResponseCollector`) were already using the correct pattern.
 
-### 4. Check Browser Console Logs
+---
 
-Look for:
-- ✅ `[AUDIO-DEBUG] subscribeToTracksAutomatically: true` (or false)
-- ✅ `[AUDIO-DEBUG] Participant Boswell: { audioSubscribed: true, audioState: 'playable' }`
-- ✅ `[AUDIO-DEBUG] track-started: ...` (bot's audio track started)
-- ❌ `audioSubscribed: false` (track not subscribed)
-- ❌ `audioState: 'off'` or `'blocked'` (track not playable)
-- ❌ Audio play failed errors
+## Test Files
 
-## Interpretation Guide
+The following test files were created in the worktree during debugging and can be used for future pipeline testing:
 
-### Scenario 1: Server Shows Audio, Client Shows audioSubscribed: false
-**Diagnosis**: Track subscription issue
-**Fix**: The `autoSubscribeActiveSpeaker={true}` change should fix this
+- `test_minimal_pipeline.py` - Phase 1: TTS only
+- `test_phase2_bidirectional.py` - Phase 2: With transport.input()
+- `test_phase3_with_diagnostics.py` - Phase 3: Broken processor
+- `test_phase4_fixed_processor.py` - Phase 4: Partial fix attempt
+- `test_phase5_correct_fix.py` - Phase 5: Correct fix
 
-### Scenario 2: Server Shows Audio, Client Shows audioSubscribed: true, Still No Sound
-**Diagnosis**: Browser autoplay or audio playback issue
-**Fix**: Check browser console for play() errors, verify audio gate was clicked
+Located in: `.worktrees/audio-pipeline-rebuild/`
 
-### Scenario 3: Server Shows No AudioRawFrames
-**Diagnosis**: TTS not generating audio OR frames blocked in pipeline
-**Fix**: Check ElevenLabs API status, quota, and websocket errors
+---
 
-### Scenario 4: Server Shows Short Speaking Durations (~800ms)
-**Diagnosis**: LLM generating very short responses OR audio chunking issue
-**Fix**: Check TextFrame content in logs, verify system prompt is working
+## Related Issues
 
-### Scenario 5: ElevenLabs Websocket Errors
-**Diagnosis**: Rate limiting or API instability
-**Fix**: Check ElevenLabs dashboard for quota/usage
+### ElevenLabs Quota (Separate Issue)
+During debugging, we also discovered the user had hit a self-imposed monthly spending limit on ElevenLabs (1,000 credits), causing extreme TTFB delays (493s). This was resolved by increasing the limit to 100,000 credits.
 
-## Next Steps
+### Browser Autoplay Policy
+The "Enable Audio" button was initially added thinking the issue was browser autoplay policy. After fixing the server-side issue, this button was removed as Daily.co's `DailyAudio` component handles autoplay automatically.
 
-After testing with diagnostics:
+---
 
-1. **If `autoSubscribeActiveSpeaker={true}` fixes it**:
-   - Keep the change, remove verbose logging
-   - Document why it's needed
-   - Consider also adding explicit `daily.updateParticipant()` subscription
+## Commits
 
-2. **If still not working**:
-   - Review all diagnostic logs
-   - Check Daily.co dashboard for room activity
-   - Test joining the room directly from Daily.co to verify server is sending audio
-   - Consider adding explicit track subscription in useEffect
-
-3. **If ElevenLabs is unstable**:
-   - Consider implementing retry logic
-   - Add buffering or queue management
-   - Contact ElevenLabs support about websocket disconnections
-
-## Related Files
-
-### Server
-- `src/boswell/voice/pipeline.py` - Pipeline setup with Daily transport
-- `src/boswell/voice/audio_diagnostics.py` - NEW diagnostic processor
-- `src/boswell/voice/bot.py` - Bot lifecycle and room creation
-- `src/boswell/server/worker.py` - Worker that runs interviews
-
-### Client
-- `room-ui/src/components/Room.tsx` - Main room component with DailyAudio
-- `room-ui/src/App.tsx` - DailyProvider setup
-
-### Dependencies
-- @daily-co/daily-react - React hooks and components for Daily.co
-- @daily-co/daily-js - Core Daily.co JavaScript SDK
-- pipecat-ai - Voice pipeline framework
-
-## References
-
-- [Daily.co DailyAudio Component](https://docs.daily.co/reference/daily-react/daily-audio)
-- [Daily.co Track Subscription](https://docs.daily.co/reference/daily-js/instance-methods/set-subscribe-to-tracks-automatically)
-- [Daily.co Audio-Only Guide](https://docs.daily.co/guides/products/audio-only)
+1. `e02f1b7` - fix(voice): correct FrameProcessor pattern to fix silent audio
+2. `4815565` - refactor(room-ui): remove audio gate and debug logging
