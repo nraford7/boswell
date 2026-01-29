@@ -1461,6 +1461,63 @@ async def bulk_delete_interviews(
     return JSONResponse({"deleted": deleted_count})
 
 
+@router.post("/projects/{project_id}/interviews/bulk-remind")
+async def bulk_remind_interviews(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Send reminder emails to multiple interviews."""
+    body = await request.json()
+    interview_ids = body.get("interview_ids", [])
+
+    if not interview_ids:
+        raise HTTPException(status_code=400, detail="No interview IDs provided")
+
+    try:
+        uuids = [UUID(id_str) for id_str in interview_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid interview ID format")
+
+    # Fetch project
+    project_result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch eligible interviews (invited or started, with email)
+    result = await db.execute(
+        select(Interview)
+        .where(Interview.id.in_(uuids))
+        .where(Interview.project_id == project_id)
+        .where(Interview.status.in_([InterviewStatus.invited, InterviewStatus.started]))
+        .where(Interview.email.isnot(None))
+    )
+    interviews = result.scalars().all()
+
+    settings = get_settings()
+    sent_count = 0
+    for interview in interviews:
+        if interview.email:
+            magic_link = f"{settings.base_url}/i/{interview.magic_token}"
+            await send_invitation_email(
+                to=interview.email,
+                guest_name=interview.name,
+                interview_topic=project.topic,
+                magic_link=magic_link,
+            )
+            sent_count += 1
+
+    logger.info(f"Sent {sent_count} reminder emails for project {project_id}")
+
+    return JSONResponse({"sent": sent_count, "total": len(interview_ids)})
+
+
 @router.post("/projects/{project_id}/delete")
 async def delete_project(
     request: Request,
