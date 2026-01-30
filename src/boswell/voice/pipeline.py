@@ -6,7 +6,7 @@ from typing import Any, Callable
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 
 logger = logging.getLogger(__name__)
-from pipecat.frames.frames import EndFrame
+from pipecat.frames.frames import EndFrame, TTSSpeakFrame
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -214,17 +214,29 @@ async def create_pipeline(
             greeting_sent = False  # Reset so we greet the actual guest
             return
 
-        # Add greeting message to context and trigger LLM
+        # Small delay to sync with countdown UI
+        import asyncio
+        await asyncio.sleep(0.5)
+
+        # Queue canned greeting - synced with countdown fade
+        if is_resumed:
+            await task.queue_frames([TTSSpeakFrame(text="Welcome back! Let me pick up where we left off.")])
+        else:
+            await task.queue_frames([TTSSpeakFrame(
+                text="Hello, I'm Boswell. Just testing my audio before we begin. Can you hear me okay?"
+            )])
+
+        # Add greeting message to context and trigger LLM for full introduction
         # Using OpenAILLMContextFrame with our actual_context preserves the system prompt
         if is_resumed:
             actual_context.add_message({
                 "role": "user",
-                "content": "Guest rejoined. Welcome back briefly, then continue."
+                "content": "Guest rejoined. You already welcomed them back. Now continue the interview from where you left off."
             })
         else:
             actual_context.add_message({
                 "role": "user",
-                "content": "Guest joined. Briefly introduce yourself as Boswell, mention the interview topic, and ask your first question. Keep the intro to 1-2 sentences."
+                "content": "Guest joined. You already introduced yourself and asked if they can hear you. Wait for them to confirm, then briefly mention the interview topic and ask your first question."
             })
         await task.queue_frames([OpenAILLMContextFrame(context=actual_context)])
 

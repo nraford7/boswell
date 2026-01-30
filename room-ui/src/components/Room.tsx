@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useDaily, useMeetingState, DailyAudio } from '@daily-co/daily-react'
 import { LoadingScreen } from './LoadingScreen'
 import { BoswellBranding } from './BoswellBranding'
@@ -8,9 +8,33 @@ interface RoomProps {
   thankYouUrl: string
 }
 
+type CountdownState = '3' | '2' | '1' | 'dots' | 'fading' | 'done'
+
 export function Room({ thankYouUrl }: RoomProps) {
   const daily = useDaily()
   const meetingState = useMeetingState()
+  const [countdown, setCountdown] = useState<CountdownState>('3')
+
+  // Countdown sequence: 3 -> 2 -> 1 -> ... -> fade -> done
+  // Total time: ~5 seconds to sync with server-side TTS delay
+  useEffect(() => {
+    if (meetingState !== 'joined-meeting') return
+
+    const timers: ReturnType<typeof setTimeout>[] = []
+
+    // 3 -> 2 after 1000ms
+    timers.push(setTimeout(() => setCountdown('2'), 1000))
+    // 2 -> 1 after 2000ms
+    timers.push(setTimeout(() => setCountdown('1'), 2000))
+    // 1 -> ... after 3000ms
+    timers.push(setTimeout(() => setCountdown('dots'), 3000))
+    // ... -> fading after 4000ms
+    timers.push(setTimeout(() => setCountdown('fading'), 4000))
+    // fading -> done after 5000ms (TTS should start now)
+    timers.push(setTimeout(() => setCountdown('done'), 5000))
+
+    return () => timers.forEach(clearTimeout)
+  }, [meetingState])
 
   // Redirect to thank you page when meeting ends
   useEffect(() => {
@@ -51,6 +75,13 @@ export function Room({ thankYouUrl }: RoomProps) {
     <div className="room">
       <DailyAudio autoSubscribeActiveSpeaker={true} />
       <BoswellBranding />
+      {countdown !== 'done' && (
+        <div className={`countdown ${countdown === 'fading' ? 'countdown-fading' : ''}`}>
+          <span className="countdown-text">
+            {countdown === 'dots' || countdown === 'fading' ? '...' : countdown}
+          </span>
+        </div>
+      )}
       <Controls />
     </div>
   )

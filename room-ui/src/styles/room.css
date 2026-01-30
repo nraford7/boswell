@@ -331,6 +331,58 @@
   flex-shrink: 0;
 }
 
+/* Countdown */
+.countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.countdown-text {
+  font-family: var(--font-display);
+  font-size: 120px;
+  font-weight: 300;
+  color: var(--accent);
+  opacity: 0.9;
+  animation: countdown-pop 0.8s ease-out;
+  display: block;
+  text-align: center;
+  text-shadow: 0 0 60px var(--accent-glow);
+}
+
+.countdown-fading .countdown-text {
+  animation: countdown-fadeout 0.8s ease-out forwards;
+}
+
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes countdown-fadeout {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
 /* Error Screen */
 .error-screen {
   height: 100%;
