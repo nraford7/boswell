@@ -700,6 +700,7 @@
                     <th>Interviewee</th>
                     <th>Status</th>
                     <th>Invitation Link</th>
+                    <th>Length</th>
                     <th>Completed</th>
                     <th></th>
                 </tr>
@@ -742,28 +743,19 @@
                         <span class="text-dim">-</span>
                         {% endif %}
                     </td>
-                    <td class="text-muted">{{ interview.completed_at.strftime('%b %d, %Y') if interview.completed_at else '-' }}</td>
+                    <td class="text-muted">
+                        {% if interview.started_at and interview.completed_at %}
+                        {% set duration = (interview.completed_at - interview.started_at).total_seconds() %}
+                        {% set hours = (duration // 3600)|int %}
+                        {% set minutes = ((duration % 3600) // 60)|int %}
+                        {% if hours > 0 %}{{ hours }}h {% endif %}{{ minutes }}m
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-muted">{{ interview.completed_at.strftime('%b %d, %Y at %I:%M %p') if interview.completed_at else '-' }}</td>
                     <td class="actions-cell">
                         {% if interview.status.value == 'completed' and interview.transcript %}
                         <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript" class="btn btn-outline btn-sm">Transcript</a>
                         {% endif %}
-                        {% if interview.status.value == 'completed' %}
-                        <form method="post" action="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/followup" style="display: inline;">
-                            <button type="submit" class="btn btn-outline btn-sm">Add Follow-up</button>
-                        </form>
-                        {% endif %}
-                        {% if interview.status.value in ['invited', 'started'] %}
-                        <button type="button" class="btn btn-outline btn-sm"
-                                hx-post="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/remind"
-                                hx-swap="none"
-                                hx-confirm="Send reminder email to {{ interview.name }}?">
-                            Remind
-                        </button>
-                        {% endif %}
-                        <form method="post" action="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/delete" style="display: inline;"
-                              onsubmit="return confirm('Delete interview with {{ interview.name }}? This cannot be undone.');">
-                            <button type="submit" class="btn btn-outline btn-sm" style="color: #994444; border-color: #994444;">Delete</button>
-                        </form>
                     </td>
                 </tr>
                 {% endfor %}
