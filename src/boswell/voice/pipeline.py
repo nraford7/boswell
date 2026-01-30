@@ -218,12 +218,12 @@ async def create_pipeline(
         import asyncio
         await asyncio.sleep(0.5)
 
-        # Queue canned greeting - synced with countdown fade
+        # Queue short audio test - doesn't introduce, just confirms audio works
         if is_resumed:
-            await task.queue_frames([TTSSpeakFrame(text="Welcome back! Let me pick up where we left off.")])
+            await task.queue_frames([TTSSpeakFrame(text="Welcome back! One moment.")])
         else:
             await task.queue_frames([TTSSpeakFrame(
-                text="Hello, I'm Boswell. Just testing my audio before we begin. Can you hear me okay?"
+                text="Hi, just testing my audio. One second. Ok, thanks."
             )])
 
         # Add greeting message to context and trigger LLM for full introduction
@@ -231,12 +231,12 @@ async def create_pipeline(
         if is_resumed:
             actual_context.add_message({
                 "role": "user",
-                "content": "Guest rejoined. You already welcomed them back. Now continue the interview from where you left off."
+                "content": "Guest rejoined. Welcome them back briefly, then continue the interview from where you left off."
             })
         else:
             actual_context.add_message({
                 "role": "user",
-                "content": "Guest joined. You already introduced yourself and asked if they can hear you. Wait for them to confirm, then briefly mention the interview topic and ask your first question."
+                "content": "Guest joined. Introduce yourself as Boswell, mention the interview topic, and ask your first question. Keep the intro to 1-2 sentences."
             })
         await task.queue_frames([OpenAILLMContextFrame(context=actual_context)])
 
