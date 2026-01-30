@@ -504,18 +504,6 @@
             </div>
             <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-outline">Edit Project</a>
         </div>
-        {% if project.public_link_token %}
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem;">
-            <span style="font-size: 0.8125rem; color: var(--fg-dim);">Public link:</span>
-            <code style="font-size: 0.75rem; color: var(--fg-muted);">{{ base_url }}/join/{{ project.public_link_token }}</code>
-            <button type="button" class="copy-btn" onclick="copyPublicLink()" title="Copy link" style="width: 24px; height: 24px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                </svg>
-            </button>
-        </div>
-        {% endif %}
     </div>
 
     {% set total_interviews = interviews|length if interviews else 0 %}
@@ -540,6 +528,39 @@
             <div class="stat-label">Pending</div>
             <div class="stat-value warning">{{ pending }}</div>
         </div>
+    </div>
+
+    <!-- Public Link -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="section-header">
+            <h2>Public Link</h2>
+            {% if project.public_link_token %}
+            <div style="display: flex; gap: 0.5rem;">
+                <form method="post" action="/admin/projects/{{ project.id }}/generate-public-link" style="display: inline;">
+                    <button type="submit" class="btn btn-outline btn-sm">Regenerate</button>
+                </form>
+                <form method="post" action="/admin/projects/{{ project.id }}/disable-public-link" style="display: inline;"
+                      onsubmit="return confirm('Disable the public link? Existing links will stop working.');">
+                    <button type="submit" class="btn btn-outline btn-sm" style="color: #994444; border-color: #994444;">Disable</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% if project.public_link_token %}
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <input type="text" readonly value="{{ base_url }}/join/{{ project.public_link_token }}"
+                   style="font-family: monospace; font-size: 0.875rem; flex: 1;" id="publicLinkInput">
+            <button type="button" class="btn btn-outline btn-sm" onclick="copyPublicLink()">Copy</button>
+        </div>
+        <p style="font-size: 0.8125rem; color: var(--fg-dim); margin-top: 0.75rem;">
+            Anyone with this link can start an interview without an invitation.
+        </p>
+        {% else %}
+        <p style="color: var(--fg-dim); margin-bottom: 1rem;">Allow anyone to start an interview without a personal invitation.</p>
+        <form method="post" action="/admin/projects/{{ project.id }}/generate-public-link">
+            <button type="submit" class="btn">Generate Public Link</button>
+        </form>
+        {% endif %}
     </div>
 
     <!-- Project Materials -->
@@ -747,10 +768,13 @@ let editMode = false;
 let selectedIds = new Set();
 let pendingAction = null;
 
-// Copy public link from header
+// Copy public link
 function copyPublicLink() {
-    const link = '{{ base_url }}/join/{{ project.public_link_token }}';
-    navigator.clipboard.writeText(link);
+    const input = document.getElementById('publicLinkInput');
+    if (input) {
+        input.select();
+        navigator.clipboard.writeText(input.value);
+    }
 }
 
 // Filter functions
