@@ -22,10 +22,6 @@
     .file-upload-label { display: block; color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 0.5rem; }
     .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
     .submit-btn { padding: 1rem 1.5rem; font-size: 1rem; }
-
-    .save-template-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
-    .save-template-row input[type="text"] { flex: 1; }
-    .save-template-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer; white-space: nowrap; }
 </style>
 {% endblock %}
 
@@ -77,76 +73,13 @@
             <hr class="form-divider">
 
             <div class="form-section">
-                <h3 class="form-section-title">Interview Type</h3>
-                <p class="form-section-desc">{% if templates %}Choose a template or customize.{% else %}<a href="/admin/templates/new" style="color: var(--accent);">Create a template</a> to reuse interview configurations.{% endif %}</p>
-
-                <div class="form-group">
-                    <label for="template_id">Template</label>
-                    <select name="template_id" id="template-select" onchange="handleTemplateChange()">
-                        {% if templates %}
-                        {% for t in templates %}
-                        <option value="{{ t.id }}">{{ t.name }} ({{ t.angle.value|title if t.angle else 'Exploratory' }}{% if t.angle_secondary %} + {{ t.angle_secondary.value|title }}{% endif %}, {{ t.default_minutes }} min)</option>
-                        {% endfor %}
-                        <option value="">Custom</option>
-                        {% else %}
-                        <option value="" selected>Custom</option>
-                        {% endif %}
-                    </select>
-                </div>
-            </div>
-
-            <hr class="form-divider">
-
-            <div class="form-section">
                 <h3 class="form-section-title">Interview Topic</h3>
-                <p class="form-section-desc">What should Boswell explore in this conversation?</p>
+                <p class="form-section-desc">Optional: Add questions specific to this interviewee. Project questions are used by default.</p>
 
                 <div class="form-group">
                     <label for="questions_text">Questions</label>
                     <textarea id="questions_text" name="questions_text" rows="4" placeholder="What drew you to this field?&#10;Can you describe a typical day?&#10;(one question per line)"></textarea>
                     <p class="form-hint">Conversation starters, one per line. Boswell will adapt based on the conversation.</p>
-                </div>
-            </div>
-
-            <div id="custom-style" class="form-section{% if templates %}" style="display: none;"{% else %}"{% endif %}>
-                <h3 class="form-section-title">Interview Style</h3>
-                <p class="form-section-desc">How should Boswell approach this conversation?</p>
-
-                <div class="form-group">
-                    <label for="angle">Approach</label>
-                    <select name="angle" id="angle-select" onchange="toggleCustomAngle()">
-                        <option value="exploratory">Exploratory - learning from guest</option>
-                        <option value="interrogative">Interrogative - testing claims</option>
-                        <option value="imaginative">Imaginative - building ideas</option>
-                        <option value="documentary">Documentary - capturing story</option>
-                        <option value="coaching">Coaching - facilitating insight</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-
-                <div class="form-group" id="custom-angle-group" style="display: none;">
-                    <label for="angle_custom">Custom Approach</label>
-                    <textarea id="angle_custom" name="angle_custom" rows="3" placeholder="Describe how Boswell should approach this interview..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="angle_secondary">Blend with</label>
-                    <select name="angle_secondary" id="angle-secondary-select">
-                        <option value="">None</option>
-                        <option value="exploratory">Exploratory</option>
-                        <option value="interrogative">Interrogative</option>
-                        <option value="imaginative">Imaginative</option>
-                        <option value="documentary">Documentary</option>
-                        <option value="coaching">Coaching</option>
-                    </select>
-                </div>
-
-                <div class="save-template-row">
-                    <label>
-                        <input type="checkbox" name="save_as_template" id="save-as-template" onchange="toggleTemplateName()">
-                        Save as template for reuse
-                    </label>
-                    <input type="text" name="new_template_name" id="new-template-name" placeholder="Template name" style="display: none;">
                 </div>
             </div>
 
@@ -182,32 +115,4 @@
         </form>
     </div>
 </div>
-
-<script>
-function handleTemplateChange() {
-    const templateSelect = document.getElementById('template-select');
-    const styleSection = document.getElementById('custom-style');
-
-    if (templateSelect.value === '') {
-        styleSection.style.display = 'block';
-    } else {
-        styleSection.style.display = 'none';
-    }
-}
-
-function toggleCustomAngle() {
-    const select = document.getElementById('angle-select');
-    const customGroup = document.getElementById('custom-angle-group');
-    customGroup.style.display = select.value === 'custom' ? 'block' : 'none';
-}
-
-function toggleTemplateName() {
-    const checkbox = document.getElementById('save-as-template');
-    const nameInput = document.getElementById('new-template-name');
-    nameInput.style.display = checkbox.checked ? 'block' : 'none';
-    if (checkbox.checked) {
-        nameInput.focus();
-    }
-}
-</script>
 {% endblock %}
