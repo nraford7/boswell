@@ -1046,7 +1046,7 @@ async def invite_form(
 
     return templates.TemplateResponse(
         request=request,
-        name="admin/invite.html",
+        name="admin/project_bulk_import.html",
         context={
             "user": user,
             "project": project,
