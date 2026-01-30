@@ -21,18 +21,18 @@
         margin-bottom: 2rem;
     }
 
-    .form-section h3 {
-        font-size: 0.875rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--fg-dim);
-        margin-bottom: 0.75rem;
+    .form-section-title {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
     }
 
-    .form-section p.help-text {
-        font-size: 0.8125rem;
+    .form-section-desc {
         color: var(--fg-dim);
-        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
     }
 
     textarea {
@@ -84,33 +84,34 @@
     <div class="card">
         <form method="post" action="/admin/projects/{{ project.id }}/edit">
             <div class="form-section">
-                <h3>Project Name</h3>
+                <h3 class="form-section-title">Project Name</h3>
+                <p class="form-section-desc">A short, memorable name for this project.</p>
                 <input type="text" name="name" value="{{ project.name or '' }}" required
                        placeholder="e.g., Q1 Customer Research">
-                <p class="help-text">A short, memorable name for this project.</p>
             </div>
 
             <div class="form-section">
-                <h3>Research Topic / Intent</h3>
+                <h3 class="form-section-title">Research Topic / Intent</h3>
+                <p class="form-section-desc">Private instructions for Boswell. Guides question generation and interview focus.</p>
                 <textarea name="topic" required placeholder="Describe the purpose and intent of this research...">{{ project.topic }}</textarea>
-                <p class="help-text">Private instructions for Boswell. Guides question generation and interview focus.</p>
             </div>
 
             <div class="form-section">
-                <h3>Public Description</h3>
+                <h3 class="form-section-title">Public Description</h3>
+                <p class="form-section-desc">Optional: Shown to guests on the public landing page. Leave blank to show project name only.</p>
                 <textarea name="public_description" placeholder="What guests see on the public interview link landing page...">{{ project.public_description or '' }}</textarea>
-                <p class="help-text">Optional: Shown to guests on the public landing page. Leave blank to show project name only.</p>
             </div>
 
             <div class="form-section">
-                <h3>Introduction Message</h3>
+                <h3 class="form-section-title">Introduction Message</h3>
+                <p class="form-section-desc">How Boswell introduces the interview: "Hi [Name], I'm here to interview you about [this text]. Ready?"</p>
                 <input type="text" name="intro_prompt" value="{{ project.intro_prompt or '' }}"
                        placeholder="e.g., your experience with our onboarding process">
-                <p class="help-text">How Boswell introduces the interview: "Hi [Name], I'm here to interview you about [this text]. Ready?"</p>
             </div>
 
             <div class="form-section">
-                <h3>Default Interview Type</h3>
+                <h3 class="form-section-title">Default Interview Type</h3>
+                <p class="form-section-desc">Template to use for all interviews in this project.</p>
                 <select name="template_id">
                     <option value="">Custom (generate questions from topic)</option>
                     {% for t in templates %}
@@ -119,19 +120,18 @@
                     </option>
                     {% endfor %}
                 </select>
-                <p class="help-text">Template to use for all interviews in this project.</p>
             </div>
 
             <div class="form-section">
-                <h3>Research Summary</h3>
+                <h3 class="form-section-title">Research Summary</h3>
+                <p class="form-section-desc">This summary helps Boswell understand the context and ask more informed questions.</p>
                 <textarea name="research_summary" placeholder="Paste or type background research, context, or materials for the AI interviewer to reference...">{{ project.research_summary or '' }}</textarea>
-                <p class="help-text">This summary helps Boswell understand the context and ask more informed questions.</p>
             </div>
 
             <div class="form-section">
-                <h3>Interview Questions</h3>
+                <h3 class="form-section-title">Interview Questions</h3>
+                <p class="form-section-desc">Enter one question per line. These serve as a guide for Boswell - the AI will follow interesting threads naturally.</p>
                 <textarea name="questions_text" class="questions-input" placeholder="Enter one question per line...">{{ questions_text }}</textarea>
-                <p class="help-text">Enter one question per line. These serve as a guide for Boswell - the AI will follow interesting threads naturally.</p>
             </div>
 
             <div class="btn-group">
