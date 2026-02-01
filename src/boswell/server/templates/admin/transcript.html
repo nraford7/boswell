@@ -105,6 +105,105 @@
         width: 16px;
         height: 16px;
     }
+
+    /* Suggested Questions Section */
+    .suggested-questions {
+        margin-top: 2rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+    }
+
+    .suggested-questions-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .suggested-questions-header h2 {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--fg);
+        margin: 0;
+    }
+
+    .question-item {
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+    }
+
+    .question-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .question-text {
+        font-weight: 500;
+        color: var(--fg);
+        margin-bottom: 0.5rem;
+    }
+
+    .question-rationale {
+        font-size: 0.875rem;
+        color: var(--fg-dim);
+        font-style: italic;
+    }
+
+    .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--fg);
+        transition: background 0.2s, border-color 0.2s;
+    }
+
+    .copy-btn:hover {
+        background: var(--bg-elevated);
+        border-color: var(--accent);
+    }
+
+    .copy-btn.copied {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+    }
+
+    .copy-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .add-to-project-form {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .no-questions {
+        text-align: center;
+        padding: 2rem;
+        color: var(--fg-dim);
+    }
+
+    .analysis-pending {
+        text-align: center;
+        padding: 2rem;
+        color: var(--fg-dim);
+        background: var(--bg);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+    }
 </style>
 {% endblock %}
 
@@ -144,8 +243,15 @@
             <span>{{ entries|length }} entries</span>
         </div>
         <div style="display: flex; gap: 0.5rem;">
-            <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download?format=md"
+            <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download?format=txt"
                class="btn btn-primary download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download TXT
+            </a>
+            <a href="/admin/projects/{{ project.id }}/interviews/{{ interview.id }}/transcript/download?format=md"
+               class="btn btn-outline download-btn">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
@@ -182,5 +288,82 @@
             </div>
         {% endif %}
     </div>
+
+    <!-- Suggested Questions Section -->
+    <div class="suggested-questions">
+        <div class="suggested-questions-header">
+            <h2>Suggested Questions for Future Interviews</h2>
+            {% if suggested_questions %}
+            <button class="copy-btn" onclick="copyQuestionsToClipboard()" id="copyBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy All
+            </button>
+            {% endif %}
+        </div>
+
+        {% if suggested_questions %}
+            {% for q in suggested_questions %}
+            <div class="question-item">
+                <div class="question-text">{{ q.question }}</div>
+                {% if q.rationale %}
+                <div class="question-rationale">{{ q.rationale }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="add-to-project-form">
+                <form method="post" action="/admin/projects/{{ project.id }}/add-questions">
+                    <input type="hidden" name="interview_id" value="{{ interview.id }}">
+                    <button type="submit" class="btn btn-primary">
+                        Add These Questions to Project
+                    </button>
+                </form>
+            </div>
+        {% elif analysis %}
+            <div class="no-questions">
+                <p>No suggested questions were generated for this interview.</p>
+            </div>
+        {% else %}
+            <div class="analysis-pending">
+                <p>Analysis is being generated. Suggested questions will appear here once complete.</p>
+                <p style="font-size: 0.875rem; margin-top: 0.5rem;">Refresh the page in a few moments to see the results.</p>
+            </div>
+        {% endif %}
+    </div>
 </div>
+
+<script>
+function copyQuestionsToClipboard() {
+    const questions = [
+        {% if suggested_questions %}
+        {% for q in suggested_questions %}
+        {{ q.question|tojson }},
+        {% endfor %}
+        {% endif %}
+    ];
+
+    const text = questions.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Copied!
+        `;
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy All
+            `;
+        }, 2000);
+    });
+}
+</script>
 {% endblock %}

@@ -339,6 +339,9 @@ async def complete_interview(
         conversation_history: List of conversation messages.
         mode: Interview mode (resume, add_detail, fresh_start, or None for new).
     """
+    # Import here to avoid circular imports
+    from boswell.server.jobs import enqueue_job
+
     # Save transcript with mode
     await save_transcript(db, interview_id, transcript_entries, conversation_history, mode)
 
@@ -353,6 +356,14 @@ async def complete_interview(
             interview.interview_mode = mode
         await db.flush()
         logger.info(f"Interview {interview_id} marked as completed (mode={mode})")
+
+        # Enqueue analysis job to generate insights and suggested questions
+        await enqueue_job(
+            db,
+            job_type="generate_analysis",
+            payload={"guest_id": str(interview_id)},
+        )
+        logger.info(f"Enqueued generate_analysis job for interview {interview_id}")
 
 
 async def run_interview_task(interview_id: UUID) -> None:

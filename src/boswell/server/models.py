@@ -282,6 +282,7 @@ class Analysis(Base):
     )
     insights: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     summary_md: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

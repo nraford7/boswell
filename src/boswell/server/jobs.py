@@ -1,10 +1,15 @@
 """Background job processor for async task processing."""
 
 import asyncio
+import json
 import logging
+import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict
 from uuid import UUID
+
+import anthropic
 
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -471,26 +476,31 @@ async def handle_generate_analysis(payload: dict, db: AsyncSession) -> None:
         f"entries={len(transcript_entries)}"
     )
 
-    # TODO: Call Claude API to generate analysis
-    # For now, generate stub analysis
-    stub_analysis = _generate_stub_analysis(
+    # Generate analysis using Claude API
+    analysis_result = await _generate_analysis_with_claude(
         interviewee_name=interview.name,
         topic=project_topic,
         transcript_entries=transcript_entries,
     )
 
+    # Add source interview ID to suggested questions
+    if analysis_result.get("suggested_questions"):
+        analysis_result["suggested_questions"]["source_interview_id"] = str(interview_id)
+
     # Create or update Analysis record
     if interview.analysis:
         # Update existing analysis
-        interview.analysis.insights = stub_analysis["insights"]
-        interview.analysis.summary_md = stub_analysis["summary_md"]
+        interview.analysis.insights = analysis_result["insights"]
+        interview.analysis.summary_md = analysis_result["summary_md"]
+        interview.analysis.suggested_questions = analysis_result.get("suggested_questions")
         logger.info(f"Updated existing analysis for interview: {interview_id}")
     else:
         # Create new analysis
         analysis = Analysis(
             interview_id=interview_id,
-            insights=stub_analysis["insights"],
-            summary_md=stub_analysis["summary_md"],
+            insights=analysis_result["insights"],
+            summary_md=analysis_result["summary_md"],
+            suggested_questions=analysis_result.get("suggested_questions"),
         )
         db.add(analysis)
         logger.info(f"Created new analysis for interview: {interview_id}")
@@ -499,12 +509,31 @@ async def handle_generate_analysis(payload: dict, db: AsyncSession) -> None:
     logger.info(f"Analysis generation complete for interview: {interview_id}")
 
 
-def _generate_stub_analysis(
+def _format_transcript_for_analysis(transcript_entries: list[dict]) -> str:
+    """Format transcript entries into readable text for Claude analysis.
+
+    Args:
+        transcript_entries: List of transcript entry dictionaries.
+
+    Returns:
+        Formatted transcript text.
+    """
+    lines = []
+    for entry in transcript_entries:
+        if entry.get("struck"):
+            continue  # Skip struck entries
+        speaker = entry.get("speaker", "Unknown")
+        text = entry.get("text", "")
+        lines.append(f"{speaker.upper()}: {text}")
+    return "\n\n".join(lines)
+
+
+async def _generate_analysis_with_claude(
     interviewee_name: str,
     topic: str,
     transcript_entries: list[dict],
 ) -> dict:
-    """Generate stub analysis for testing.
+    """Generate analysis using Claude API.
 
     Args:
         interviewee_name: Name of the interviewee.
@@ -512,7 +541,179 @@ def _generate_stub_analysis(
         transcript_entries: List of transcript entry dictionaries.
 
     Returns:
-        Dictionary with insights and summary_md fields.
+        Dictionary with insights, summary_md, and suggested_questions fields.
+    """
+    api_key = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.warning("Claude API key not configured, using stub analysis")
+        return _generate_stub_analysis(interviewee_name, topic, transcript_entries)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    transcript_text = _format_transcript_for_analysis(transcript_entries)
+    num_entries = len([e for e in transcript_entries if not e.get("struck")])
+
+    prompt = f"""You are an expert research analyst. Analyze the following interview transcript and provide a comprehensive analysis.
+
+Interview Topic: {topic}
+Interviewee: {interviewee_name}
+Total Exchanges: {num_entries}
+
+TRANSCRIPT:
+{transcript_text}
+
+---
+
+Please provide your analysis in the following JSON format. Be thorough and specific, referencing actual content from the transcript:
+
+{{
+    "key_themes": [
+        "Theme 1 - brief description",
+        "Theme 2 - brief description",
+        "Theme 3 - brief description"
+    ],
+    "notable_insights": [
+        "Specific insight from the interview with context",
+        "Another notable point made by the interviewee"
+    ],
+    "notable_quotes": [
+        "Direct quote from the interviewee that stands out",
+        "Another meaningful quote"
+    ],
+    "sentiment": {{
+        "overall": "positive|neutral|negative|mixed",
+        "confidence": 0.0 to 1.0,
+        "notes": "Brief explanation of sentiment assessment"
+    }},
+    "topics_discussed": [
+        {{"topic": "topic name", "depth": "detailed|moderate|brief", "summary": "brief summary"}},
+    ],
+    "summary": "A 2-3 paragraph narrative summary of the interview, highlighting the most important points and the interviewee's perspective",
+    "suggested_questions": [
+        {{
+            "question": "Suggested follow-up question for future interviews",
+            "rationale": "Why this question would be valuable based on this interview"
+        }},
+        {{
+            "question": "Another suggested question",
+            "rationale": "Why this is relevant"
+        }}
+    ]
+}}
+
+Generate 5-7 suggested follow-up questions that would be valuable for future interviews on this topic, based on what you learned from this transcript. Focus on:
+- Gaps in information that weren't fully explored
+- Interesting threads that could be developed further
+- Contrasting perspectives that could be explored
+- Deeper dives into key themes
+
+Return ONLY the JSON object, no additional text or markdown formatting."""
+
+    try:
+        response = await asyncio.to_thread(
+            lambda: client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        )
+
+        response_text = response.content[0].text.strip()
+
+        # Try to extract JSON from the response
+        # Sometimes Claude wraps it in markdown code blocks
+        if response_text.startswith("```"):
+            # Extract content between code blocks
+            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
+            if match:
+                response_text = match.group(1).strip()
+
+        analysis_data = json.loads(response_text)
+
+        # Build the insights dict
+        insights = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "interviewee_name": interviewee_name,
+            "topic": topic,
+            "transcript_length": num_entries,
+            "key_themes": analysis_data.get("key_themes", []),
+            "notable_quotes": analysis_data.get("notable_quotes", []),
+            "notable_insights": analysis_data.get("notable_insights", []),
+            "sentiment": analysis_data.get("sentiment", {"overall": "neutral", "confidence": 0.5}),
+            "topics_discussed": analysis_data.get("topics_discussed", []),
+        }
+
+        # Build the markdown summary
+        summary_md = f"""# Interview Analysis: {topic}
+
+## Interviewee
+**{interviewee_name}**
+
+## Summary
+{analysis_data.get("summary", "No summary available.")}
+
+## Key Themes
+"""
+        for i, theme in enumerate(analysis_data.get("key_themes", []), 1):
+            summary_md += f"{i}. {theme}\n"
+
+        summary_md += "\n## Notable Insights\n"
+        for insight in analysis_data.get("notable_insights", []):
+            summary_md += f"- {insight}\n"
+
+        summary_md += "\n## Notable Quotes\n"
+        for quote in analysis_data.get("notable_quotes", []):
+            summary_md += f"> \"{quote}\"\n\n"
+
+        summary_md += f"""
+## Topics Discussed
+"""
+        for topic_item in analysis_data.get("topics_discussed", []):
+            depth = topic_item.get("depth", "moderate")
+            topic_name = topic_item.get("topic", "Unknown")
+            topic_summary = topic_item.get("summary", "")
+            summary_md += f"- **{topic_name}** ({depth}): {topic_summary}\n"
+
+        summary_md += f"""
+---
+*Analysis generated at {datetime.now(timezone.utc).isoformat()}*
+"""
+
+        # Build suggested questions
+        suggested_questions = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source_interview_id": None,  # Will be set by caller
+            "questions": analysis_data.get("suggested_questions", []),
+        }
+
+        return {
+            "insights": insights,
+            "summary_md": summary_md,
+            "suggested_questions": suggested_questions,
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Claude response as JSON: {e}")
+        logger.debug(f"Response text was: {response_text[:500]}...")
+        return _generate_stub_analysis(interviewee_name, topic, transcript_entries)
+    except Exception as e:
+        logger.exception(f"Claude API error: {e}")
+        return _generate_stub_analysis(interviewee_name, topic, transcript_entries)
+
+
+def _generate_stub_analysis(
+    interviewee_name: str,
+    topic: str,
+    transcript_entries: list[dict],
+) -> dict:
+    """Generate stub analysis when Claude API is unavailable.
+
+    Args:
+        interviewee_name: Name of the interviewee.
+        topic: Topic of the interview.
+        transcript_entries: List of transcript entry dictionaries.
+
+    Returns:
+        Dictionary with insights, summary_md, and suggested_questions fields.
     """
     num_entries = len(transcript_entries)
 
@@ -527,16 +728,20 @@ def _generate_stub_analysis(
             "Future outlook and predictions",
         ],
         "notable_quotes": [
-            "[Quote extraction will be implemented with Claude integration]"
+            "[Quote extraction requires Claude API integration]"
+        ],
+        "notable_insights": [
+            "[Insights require Claude API integration]"
         ],
         "sentiment": {
-            "overall": "positive",
-            "confidence": 0.75,
+            "overall": "neutral",
+            "confidence": 0.5,
+            "notes": "Stub analysis - actual sentiment requires Claude API",
         },
         "topics_discussed": [
-            {"topic": topic, "depth": "detailed"},
-            {"topic": "background", "depth": "moderate"},
-            {"topic": "future outlook", "depth": "brief"},
+            {"topic": topic, "depth": "detailed", "summary": "Main interview topic"},
+            {"topic": "background", "depth": "moderate", "summary": "Interviewee background"},
+            {"topic": "future outlook", "depth": "brief", "summary": "Future perspectives"},
         ],
     }
 
@@ -545,9 +750,11 @@ def _generate_stub_analysis(
 ## Interviewee
 **{interviewee_name}**
 
-## Overview
+## Summary
 This interview covered {topic} with {interviewee_name}. The conversation
 included {num_entries} exchanges and touched on several key themes.
+
+*Note: Detailed AI analysis requires Claude API configuration.*
 
 ## Key Themes
 1. **Theme related to {topic}** - Core discussion around the main topic
@@ -555,19 +762,42 @@ included {num_entries} exchanges and touched on several key themes.
 3. **Future outlook** - Predictions and expectations going forward
 
 ## Notable Insights
-- [Detailed insights will be generated with Claude integration]
-
-## Summary
-The interview provided valuable perspectives on {topic}. The interviewee shared
-their experiences and offered thoughtful commentary on current challenges
-and future opportunities.
+- [Detailed insights require Claude API integration]
 
 ---
 *Analysis generated at {datetime.now(timezone.utc).isoformat()}*
-*Note: This is a stub analysis - full AI analysis coming soon*
+*Note: This is a placeholder analysis - configure CLAUDE_API_KEY for full analysis*
 """
+
+    suggested_questions = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source_interview_id": None,
+        "questions": [
+            {
+                "question": f"What specific challenges have you faced in {topic}?",
+                "rationale": "Explore concrete obstacles and how they were overcome",
+            },
+            {
+                "question": f"How has your approach to {topic} evolved over time?",
+                "rationale": "Understand the learning journey and perspective shifts",
+            },
+            {
+                "question": f"What advice would you give to someone new to {topic}?",
+                "rationale": "Capture actionable wisdom for others",
+            },
+            {
+                "question": f"What do you see as the future of {topic}?",
+                "rationale": "Explore forward-looking perspectives and predictions",
+            },
+            {
+                "question": "Is there anything we didn't cover that you think is important?",
+                "rationale": "Capture topics the interviewee finds significant",
+            },
+        ],
+    }
 
     return {
         "insights": insights,
         "summary_md": summary_md,
+        "suggested_questions": suggested_questions,
     }

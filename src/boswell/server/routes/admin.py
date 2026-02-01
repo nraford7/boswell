@@ -22,7 +22,7 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_invitation_email
 from boswell.server.main import templates
-from boswell.server.models import Interview, InterviewAngle, InterviewStatus, Project, InterviewTemplate, Transcript, User
+from boswell.server.models import Analysis, Interview, InterviewAngle, InterviewStatus, Project, InterviewTemplate, Transcript, User
 from boswell.server.routes.auth import get_current_user
 
 # Import ingestion functions
@@ -1695,12 +1695,13 @@ async def view_transcript(
     db: AsyncSession = Depends(get_session),
 ):
     """View the transcript for an interview."""
-    # Fetch the interview with transcript and project
+    # Fetch the interview with transcript, analysis, and project
     result = await db.execute(
         select(Interview)
         .options(
             selectinload(Interview.project),
             selectinload(Interview.transcript),
+            selectinload(Interview.analysis),
         )
         .where(Interview.id == interview_id)
         .where(Interview.project_id == project_id)
@@ -1717,6 +1718,11 @@ async def view_transcript(
     if not interview.transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
+    # Extract suggested questions if analysis exists
+    suggested_questions = None
+    if interview.analysis and interview.analysis.suggested_questions:
+        suggested_questions = interview.analysis.suggested_questions.get("questions", [])
+
     return templates.TemplateResponse(
         request=request,
         name="admin/transcript.html",
@@ -1726,6 +1732,8 @@ async def view_transcript(
             "interview": interview,
             "transcript": interview.transcript,
             "entries": interview.transcript.entries or [],
+            "analysis": interview.analysis,
+            "suggested_questions": suggested_questions,
         },
     )
 
@@ -1739,7 +1747,7 @@ async def download_transcript(
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Download the transcript as JSON or Markdown."""
+    """Download the transcript as JSON, Markdown, or plain text."""
     # Fetch the interview with transcript and project
     result = await db.execute(
         select(Interview)
@@ -1799,6 +1807,39 @@ async def download_transcript(
         return Response(
             content=content,
             media_type="text/markdown",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            },
+        )
+
+    if format == "txt":
+        # Build plain text content
+        lines = [
+            f"Interview Transcript: {interview.name}",
+            f"Topic: {interview.project.topic}",
+        ]
+        if interview.email:
+            lines.append(f"Email: {interview.email}")
+        if interview.completed_at:
+            lines.append(f"Date: {interview.completed_at.strftime('%B %d, %Y at %I:%M %p')}")
+        lines.extend(["", "=" * 50, ""])
+
+        entries = interview.transcript.entries or []
+        for entry in entries:
+            if entry.get("struck"):
+                continue  # Skip struck entries
+            speaker = entry.get("speaker", "Unknown")
+            text = entry.get("text", "")
+            lines.append(f"{speaker}: {text}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        filename = f"transcript-{safe_name}-{interview_id}.txt"
+
+        from fastapi.responses import Response
+        return Response(
+            content=content,
+            media_type="text/plain",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"'
             },
@@ -1937,6 +1978,95 @@ async def edit_project(
 
     return RedirectResponse(
         url=f"/admin/projects/{project_id}",
+        status_code=303,
+    )
+
+
+@router.post("/projects/{project_id}/add-questions")
+async def add_questions_from_interview(
+    request: Request,
+    project_id: UUID,
+    interview_id: UUID = Form(...),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Add suggested questions from an interview's analysis to the project.
+
+    Merges the suggested questions from the interview's analysis into the
+    project's existing question set, avoiding duplicates.
+    """
+    # Fetch project
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id)
+        .where(Project.team_id == user.team_id)
+    )
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Fetch interview with analysis
+    interview_result = await db.execute(
+        select(Interview)
+        .options(selectinload(Interview.analysis))
+        .where(Interview.id == interview_id)
+        .where(Interview.project_id == project_id)
+    )
+    interview = interview_result.scalar_one_or_none()
+
+    if interview is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    if not interview.analysis or not interview.analysis.suggested_questions:
+        raise HTTPException(status_code=400, detail="No suggested questions available for this interview")
+
+    # Get existing project questions
+    existing_questions = []
+    if project.questions and isinstance(project.questions, dict):
+        existing_questions = project.questions.get("questions", [])
+
+    # Extract text from existing questions for duplicate detection
+    existing_texts = set()
+    for q in existing_questions:
+        if isinstance(q, dict):
+            existing_texts.add(q.get("text", "").lower().strip())
+        elif isinstance(q, str):
+            existing_texts.add(q.lower().strip())
+
+    # Get suggested questions from the analysis
+    suggested = interview.analysis.suggested_questions.get("questions", [])
+
+    # Add new questions that aren't duplicates
+    added_count = 0
+    next_id = len(existing_questions) + 1
+    for sq in suggested:
+        question_text = sq.get("question", "") if isinstance(sq, dict) else str(sq)
+        if question_text.lower().strip() not in existing_texts:
+            new_question = {
+                "id": next_id,
+                "text": question_text,
+                "type": "suggested",
+                "source": f"interview:{interview_id}",
+            }
+            if isinstance(sq, dict) and sq.get("rationale"):
+                new_question["rationale"] = sq["rationale"]
+            existing_questions.append(new_question)
+            existing_texts.add(question_text.lower().strip())
+            next_id += 1
+            added_count += 1
+
+    # Update project questions
+    project.questions = {"questions": existing_questions}
+    await db.commit()
+
+    logger.info(
+        f"Added {added_count} suggested questions from interview {interview_id} "
+        f"to project {project_id}"
+    )
+
+    return RedirectResponse(
+        url=f"/admin/projects/{project_id}/interviews/{interview_id}/transcript",
         status_code=303,
     )
 
