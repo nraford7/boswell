@@ -234,11 +234,30 @@
         </div>
 
         {% if is_returning %}
-        <div class="info-section" style="background: var(--accent-subtle); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
-            <p style="color: var(--accent); font-size: 0.875rem; margin: 0;">
-                <strong>Welcome back!</strong> You've completed this interview before.
-                Boswell will ask if you'd like to continue, add detail to your previous answers, or start fresh.
-            </p>
+        <div class="info-section" style="background: var(--accent-subtle); padding: 1.25rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <svg style="width: 20px; height: 20px; color: var(--accent); flex-shrink: 0; margin-top: 0.125rem;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <div>
+                    <p style="color: var(--accent); font-size: 0.9375rem; font-weight: 500; margin: 0 0 0.5rem 0;">
+                        Welcome back, {{ interview.name }}!
+                    </p>
+                    {% if previous_session_date %}
+                    <p style="color: var(--fg-muted); font-size: 0.8125rem; margin: 0 0 0.75rem 0;">
+                        Your previous session was on {{ previous_session_date.strftime('%B %d, %Y') }}.
+                    </p>
+                    {% endif %}
+                    <p style="color: var(--fg-muted); font-size: 0.8125rem; margin: 0; line-height: 1.5;">
+                        When you start, Boswell will ask how you'd like to proceed:
+                    </p>
+                    <ul style="color: var(--fg-muted); font-size: 0.8125rem; margin: 0.5rem 0 0 0; padding-left: 1.25rem; line-height: 1.6;">
+                        <li><strong>Continue</strong> - Pick up where you left off</li>
+                        <li><strong>Add Detail</strong> - Expand on your previous answers</li>
+                        <li><strong>Start Fresh</strong> - Begin a new interview</li>
+                    </ul>
+                </div>
+            </div>
         </div>
         {% endif %}
 

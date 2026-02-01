@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -149,15 +149,16 @@ async def interview_landing(
             status_code=404,
         )
 
-    # Completed - for named guests, show landing page with "Start or Resume" option
-    # For generic link guests, redirect to thank you page
+    # Completed - show landing page with resume options if there's a transcript
     if interview.status == InterviewStatus.completed:
-        # Check if this is a named guest (has email or was created via admin)
-        # Generic link guests have no email and were created on-the-fly
-        is_named_guest = interview.email is not None or interview.claimed_by is not None
+        # Check if there's an existing transcript
+        transcript_result = await db.execute(
+            select(Transcript).where(Transcript.interview_id == interview.id)
+        )
+        existing_transcript = transcript_result.scalar_one_or_none()
 
-        if is_named_guest:
-            # Show landing page with option to resume
+        if existing_transcript:
+            # Show landing page with option to resume/continue
             return templates.TemplateResponse(
                 request=request,
                 name="guest/landing.html",
@@ -165,10 +166,11 @@ async def interview_landing(
                     "project": interview.project,
                     "interview": interview,
                     "is_returning": True,
+                    "previous_session_date": interview.completed_at or interview.started_at,
                 },
             )
         else:
-            # Generic link guests go to thank you
+            # No transcript - redirect to thank you page
             return RedirectResponse(
                 url=f"/i/{magic_token}/thankyou",
                 status_code=303,
@@ -537,7 +539,8 @@ async def start_public_interview(
 ):
     """Start an interview from a public link.
 
-    Creates a new Interview record, Daily.co room, and redirects to room.
+    If a guest with the same name already exists for this project,
+    returns their existing interview. Otherwise creates a new Interview record.
     """
     # Validate guest name
     guest_name = guest_name.strip()
@@ -556,28 +559,36 @@ async def start_public_interview(
     if project is None:
         raise HTTPException(status_code=404, detail="Interview link not found")
 
+    # Check for existing interview with same name for this project (case-insensitive)
+    existing_result = await db.execute(
+        select(Interview)
+        .where(Interview.project_id == project.id)
+        .where(func.lower(Interview.name) == guest_name.lower())
+        .order_by(Interview.invited_at.desc())  # Get most recent if multiple
+    )
+    existing_interview = existing_result.scalars().first()
+
+    if existing_interview:
+        # Return existing interview - guest will be redirected to landing page
+        # which will show appropriate options based on status
+        logger.info(
+            f"Returning guest matched by name: {guest_name} -> interview {existing_interview.id}"
+        )
+        # Return JSON with magic_token for localStorage storage
+        return {"magic_token": existing_interview.magic_token, "is_returning": True}
+
     # Create new Interview record
     interview = Interview(
         project_id=project.id,
         name=guest_name,
         email=None,  # No email for public interviews
-        status=InterviewStatus.started,
-        started_at=datetime.now(timezone.utc),
+        status=InterviewStatus.invited,  # Start as invited, not started
         template_id=project.template_id,  # Use project's default template
     )
     db.add(interview)
-    await db.flush()  # Get the interview ID
-
-    # Create Daily.co room with guest's name
-    room_info = await create_daily_room(str(interview.id), guest_name)
-
-    interview.room_name = room_info["room_name"]
-    interview.room_token = room_info["room_token"]
-
     await db.commit()
 
-    # Redirect to interview room
-    return RedirectResponse(
-        url=f"/i/{interview.magic_token}/room",
-        status_code=303,
-    )
+    logger.info(f"New public interview created: {interview.id} for {guest_name}")
+
+    # Return JSON with magic_token for localStorage storage
+    return {"magic_token": interview.magic_token, "is_returning": False}

@@ -3,6 +3,19 @@
 {% block title %}Join Interview{% if project.name %} - {{ project.name }}{% endif %}{% endblock %}
 
 {% block head %}
+<script>
+    // Check localStorage on page load for existing session
+    (function() {
+        const projectToken = "{{ token }}";
+        const storageKey = "boswell_token_" + projectToken;
+        const storedMagicToken = localStorage.getItem(storageKey);
+
+        if (storedMagicToken) {
+            // Redirect to existing interview
+            window.location.href = "/i/" + storedMagicToken;
+        }
+    })();
+</script>
 <style>
     .welcome-container {
         max-width: 480px;
@@ -148,7 +161,7 @@
             Please enter your name to begin.
         </p>
 
-        <form method="post" action="/join/{{ token }}/start" class="name-form">
+        <form id="name-form" class="name-form">
             <label for="guest_name">Your Name</label>
             <input type="text" id="guest_name" name="guest_name"
                    placeholder="Enter your name"
@@ -156,7 +169,7 @@
                    minlength="2"
                    maxlength="100"
                    autofocus>
-            <button type="submit" class="btn">Start Interview</button>
+            <button type="submit" class="btn" id="submit-btn">Start Interview</button>
         </form>
 
         <p class="terms-text">
@@ -165,4 +178,53 @@
         </p>
     </div>
 </div>
+
+<script>
+document.getElementById('name-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const projectToken = "{{ token }}";
+    const storageKey = "boswell_token_" + projectToken;
+    const guestName = document.getElementById('guest_name').value.trim();
+    const submitBtn = document.getElementById('submit-btn');
+
+    if (!guestName || guestName.length < 2) {
+        alert('Please enter your name (at least 2 characters)');
+        return;
+    }
+
+    // Disable button and show loading state
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Starting...';
+
+    try {
+        const formData = new FormData();
+        formData.append('guest_name', guestName);
+
+        const response = await fetch('/join/' + projectToken + '/start', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to start interview');
+        }
+
+        const data = await response.json();
+
+        // Store magic_token in localStorage
+        localStorage.setItem(storageKey, data.magic_token);
+
+        // Redirect to interview landing page
+        window.location.href = '/i/' + data.magic_token;
+
+    } catch (error) {
+        console.error('Error starting interview:', error);
+        alert('Error: ' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Start Interview';
+    }
+});
+</script>
 {% endblock %}
