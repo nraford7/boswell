@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -539,8 +539,8 @@ async def start_public_interview(
 ):
     """Start an interview from a public link.
 
-    If a guest with the same name already exists for this project,
-    returns their existing interview. Otherwise creates a new Interview record.
+    Always creates a new Interview record. Returning guests are handled
+    client-side via localStorage token storage.
     """
     # Validate guest name
     guest_name = guest_name.strip()
@@ -559,25 +559,8 @@ async def start_public_interview(
     if project is None:
         raise HTTPException(status_code=404, detail="Interview link not found")
 
-    # Check for existing interview with same name for this project (case-insensitive)
-    existing_result = await db.execute(
-        select(Interview)
-        .where(Interview.project_id == project.id)
-        .where(func.lower(Interview.name) == guest_name.lower())
-        .order_by(Interview.invited_at.desc())  # Get most recent if multiple
-    )
-    existing_interview = existing_result.scalars().first()
-
-    if existing_interview:
-        # Return existing interview - guest will be redirected to landing page
-        # which will show appropriate options based on status
-        logger.info(
-            f"Returning guest matched by name: {guest_name} -> interview {existing_interview.id}"
-        )
-        # Return JSON with magic_token for localStorage storage
-        return {"magic_token": existing_interview.magic_token, "is_returning": True}
-
-    # Create new Interview record
+    # Always create new Interview record
+    # Returning guests are handled client-side via localStorage magic_token
     interview = Interview(
         project_id=project.id,
         name=guest_name,
