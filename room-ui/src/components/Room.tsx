@@ -42,8 +42,12 @@ export function Room({ thankYouUrl }: RoomProps) {
     if (!daily) return
 
     const handleAppMessage = (event: any) => {
-      if (event.data?.question) {
-        setCurrentQuestion(event.data.question)
+      if (event.data?.type !== 'display-question') return
+      const q = event.data.question
+      if (typeof q === 'string' && q.trim()) {
+        setCurrentQuestion(q)
+      } else {
+        setCurrentQuestion(null)
       }
     }
 

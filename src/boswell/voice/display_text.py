@@ -71,7 +71,7 @@ class DisplayTextProcessor(FrameProcessor):
             question: The question text to display.
         """
         try:
-            await self._transport.send_app_message({"question": question})
+            await self._transport.send_app_message({"type": "display-question", "question": question})
             logger.debug(f"Sent question to frontend: {question[:50]}...")
         except Exception as e:
             logger.warning(f"Failed to send question to frontend: {e}")

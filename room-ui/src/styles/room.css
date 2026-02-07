@@ -465,9 +465,27 @@
   font-size: 1.1rem;
   line-height: 1.5;
   text-align: center;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   animation: question-fade-in 0.3s ease-out;
   z-index: 5;
+}
+
+@media (max-width: 600px) {
+  .current-question {
+    max-width: 90%;
+    bottom: 90px;
+    padding: 12px 18px;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-height: 500px) {
+  .current-question {
+    bottom: 70px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
 }
 
 @keyframes question-fade-in {
