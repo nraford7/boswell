@@ -14,6 +14,7 @@ export function Room({ thankYouUrl }: RoomProps) {
   const daily = useDaily()
   const meetingState = useMeetingState()
   const [countdown, setCountdown] = useState<CountdownState>('3')
+  const [currentQuestion, setCurrentQuestion] = useState<string | null>(null)
 
   // Countdown sequence: 3 -> 2 -> 1 -> ... -> fade -> done
   // Total time: ~5 seconds to sync with server-side TTS delay
@@ -35,6 +36,22 @@ export function Room({ thankYouUrl }: RoomProps) {
 
     return () => timers.forEach(clearTimeout)
   }, [meetingState])
+
+  // Listen for question updates from Boswell
+  useEffect(() => {
+    if (!daily) return
+
+    const handleAppMessage = (event: any) => {
+      if (event.data?.question) {
+        setCurrentQuestion(event.data.question)
+      }
+    }
+
+    daily.on('app-message', handleAppMessage)
+    return () => {
+      daily.off('app-message', handleAppMessage)
+    }
+  }, [daily])
 
   // Redirect to thank you page when meeting ends
   useEffect(() => {
@@ -80,6 +97,11 @@ export function Room({ thankYouUrl }: RoomProps) {
           <span className="countdown-text">
             {countdown === 'dots' || countdown === 'fading' ? '...' : countdown}
           </span>
+        </div>
+      )}
+      {currentQuestion && countdown === 'done' && (
+        <div className="current-question">
+          {currentQuestion}
         </div>
       )}
       <Controls />
