@@ -23,6 +23,7 @@ from boswell.voice.mode_detection import ModeDetectionProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
 from boswell.voice.strike_control import StrikeControlProcessor
 from boswell.voice.audio_diagnostics import AudioDiagnosticsProcessor
+from boswell.voice.display_text import DisplayTextProcessor
 # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency issues
 # from boswell.voice.speaking_state import SpeakingStateProcessor
 
@@ -157,6 +158,9 @@ async def create_pipeline(
     # Set up audio diagnostics for debugging
     audio_diagnostics = AudioDiagnosticsProcessor()
 
+    # Set up display text for frontend question display
+    display_text_processor = DisplayTextProcessor(transport)
+
     # SpeakingStateProcessor disabled - frontend AudioVisualizer disabled due to latency
     # speaking_state_processor = SpeakingStateProcessor()
 
@@ -174,6 +178,7 @@ async def create_pipeline(
             speed_control_processor,  # Process speed tags and adjust TTS
             mode_detection_processor,  # Detect mode tags for returning guests
             bot_response_collector,  # Capture bot responses after LLM
+            display_text_processor,  # Send questions to frontend display
             tts,
             audio_diagnostics,  # DEBUG: Log audio frames before output
             # speaking_state_processor,  # Disabled - latency issues
