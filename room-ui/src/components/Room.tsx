@@ -42,14 +42,13 @@ export function Room({ thankYouUrl }: RoomProps) {
     if (!daily) return
 
     const handleAppMessage = (event: any) => {
-      // Only accept messages from owner participants (the bot)
-      const sender = daily.participants()?.[event.fromId]
-      if (!sender?.owner) return
-      if (event.data?.type !== 'display-question') return
-      const q = event.data.question
+      // Accept both typed messages and legacy format without type field
+      const d = event.data
+      if (d?.type && d.type !== 'display-question') return
+      const q = d?.question
       if (typeof q === 'string' && q.trim()) {
         setCurrentQuestion(q)
-      } else {
+      } else if (q !== undefined) {
         setCurrentQuestion(null)
       }
     }
