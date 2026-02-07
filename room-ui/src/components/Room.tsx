@@ -42,6 +42,9 @@ export function Room({ thankYouUrl }: RoomProps) {
     if (!daily) return
 
     const handleAppMessage = (event: any) => {
+      // Only accept messages from owner participants (the bot)
+      const sender = daily.participants()?.[event.fromId]
+      if (!sender?.owner) return
       if (event.data?.type !== 'display-question') return
       const q = event.data.question
       if (typeof q === 'string' && q.trim()) {
