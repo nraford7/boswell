@@ -9,6 +9,7 @@ When the interview completes, it saves the transcript and updates the interview 
 import asyncio
 import logging
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -92,9 +93,11 @@ def get_effective_interview_config(interview, template):
     }
 
 
-# Track active interviews to prevent duplicate bot sessions
-# Maps interview_id -> asyncio.Task
-_active_interviews: dict[UUID, asyncio.Task] = {}
+# Worker identity for claim tracking
+WORKER_ID = f"{socket.gethostname()}-{os.getpid()}"
+
+# Maximum concurrent interview tasks per worker
+MAX_CONCURRENT = int(os.environ.get("WORKER_MAX_CONCURRENT", "3"))
 
 
 def _extract_questions_list(project: Project) -> list[str]:
@@ -500,135 +503,137 @@ async def run_interview_task(interview_id: UUID) -> None:
 
     except Exception as e:
         logger.exception(f"Interview failed for {interview_id}: {e}")
-        # Don't mark as failed - leave as "started" so it can be retried
-        # or manually resolved
+        # Release claim so it can be retried
+        try:
+            async with get_session_context() as db:
+                result = await db.execute(
+                    select(Interview).where(Interview.id == interview_id)
+                )
+                interview = result.scalar_one_or_none()
+                if interview:
+                    interview.claimed_by = None
+                    interview.claimed_at = None
+                    await db.commit()
+        except Exception as release_err:
+            logger.error(f"Failed to release claim for {interview_id}: {release_err}")
 
     finally:
-        # Remove from active interviews
-        _active_interviews.pop(interview_id, None)
         logger.info(f"Interview task ended for {interview_id}")
 
 
-async def find_pending_interviews(db: AsyncSession) -> list[Interview]:
-    """Find interviews that are ready to run but don't have an active bot.
+async def claim_next_interview(db: AsyncSession) -> Interview | None:
+    """Atomically claim the next interview ready to run.
 
-    Criteria:
-    - status = "started"
-    - room_name is not null
-    - Not already in _active_interviews
+    Uses SELECT ... FOR UPDATE SKIP LOCKED to prevent duplicate claims
+    across multiple worker instances.
 
     Args:
         db: Database session.
 
     Returns:
-        List of Interview objects ready to run.
+        The claimed Interview, or None if nothing is available.
     """
-    result = await db.execute(
+    stmt = (
         select(Interview)
         .options(selectinload(Interview.project))
         .where(
             and_(
                 Interview.status == InterviewStatus.started,
                 Interview.room_name.isnot(None),
+                Interview.claimed_by.is_(None),
             )
         )
+        .order_by(Interview.started_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
     )
-    interviews = list(result.scalars().all())
+    result = await db.execute(stmt)
+    interview = result.scalar_one_or_none()
 
-    # Filter out interviews that are already active
-    pending = [i for i in interviews if i.id not in _active_interviews]
+    if interview:
+        interview.claimed_by = WORKER_ID
+        interview.claimed_at = datetime.now(timezone.utc)
+        await db.flush()
+        logger.info(f"Claimed interview {interview.id} (worker={WORKER_ID})")
 
-    return pending
+    return interview
 
 
 async def run_voice_worker(
     poll_interval: int = 5,
     max_iterations: int | None = None,
 ) -> None:
-    """Main voice worker loop.
+    """Main voice worker loop with bounded concurrency.
 
     Polls for interviews with status="started" and room_name set,
-    then starts interview bots for each eligible interview.
+    atomically claims them via DB lock, then starts interview bots
+    up to MAX_CONCURRENT at a time.
 
     Args:
         poll_interval: Seconds to wait between polling when no interviews found.
         max_iterations: Maximum number of poll iterations (None for infinite).
             Useful for testing.
     """
-    logger.info(f"Starting voice worker (poll_interval={poll_interval}s)")
+    logger.info(f"Starting voice worker (id={WORKER_ID}, max_concurrent={MAX_CONCURRENT})")
     iterations = 0
+    active_tasks: dict[UUID, asyncio.Task] = {}
 
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
 
-        try:
-            async with get_session_context() as db:
-                pending_interviews = await find_pending_interviews(db)
+        # Clean up finished tasks
+        done = [iid for iid, task in active_tasks.items() if task.done()]
+        for iid in done:
+            active_tasks.pop(iid)
 
-                if pending_interviews:
-                    logger.info(f"Found {len(pending_interviews)} pending interview(s)")
+        # Only claim if under capacity
+        if len(active_tasks) < MAX_CONCURRENT:
+            try:
+                async with get_session_context() as db:
+                    interview = await claim_next_interview(db)
+                    if interview:
+                        logger.info(f"Starting interview {interview.id} (room={interview.room_name})")
+                        task = asyncio.create_task(run_interview_task(interview.id))
+                        active_tasks[interview.id] = task
+                        continue  # Check for more immediately
+            except Exception as e:
+                logger.exception(f"Voice worker error: {e}")
 
-                for interview in pending_interviews:
-                    # Start interview task
-                    logger.info(
-                        f"Starting interview {interview.id} "
-                        f"(room={interview.room_name})"
-                    )
-
-                    # Create and track the task
-                    task = asyncio.create_task(run_interview_task(interview.id))
-                    _active_interviews[interview.id] = task
-
-        except Exception as e:
-            logger.exception(f"Voice worker error: {e}")
-
-        # Wait before next poll
         await asyncio.sleep(poll_interval)
+
+    # Cancel remaining tasks on shutdown
+    for task in active_tasks.values():
+        task.cancel()
 
     logger.info("Voice worker stopped")
 
 
 async def shutdown_voice_worker() -> None:
-    """Gracefully shutdown all active interview tasks.
+    """Gracefully shutdown the voice worker.
 
-    Cancels all running interview tasks and waits for them to complete.
+    With the new DB-backed claim mechanism, active task cancellation is
+    handled by run_voice_worker when it exits its loop. This function
+    releases any stale claims owned by this worker so they can be
+    picked up by another instance.
     """
-    if not _active_interviews:
-        logger.info("No active interviews to shutdown")
-        return
+    logger.info(f"Releasing stale claims for worker {WORKER_ID}")
+    try:
+        async with get_session_context() as db:
+            result = await db.execute(
+                select(Interview).where(
+                    and_(
+                        Interview.claimed_by == WORKER_ID,
+                        Interview.status == InterviewStatus.started,
+                    )
+                )
+            )
+            stale = list(result.scalars().all())
+            for interview in stale:
+                interview.claimed_by = None
+                interview.claimed_at = None
+                logger.info(f"Released stale claim on interview {interview.id}")
+            await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to release stale claims: {e}")
 
-    logger.info(f"Shutting down {len(_active_interviews)} active interview(s)")
-
-    # Cancel all tasks
-    for interview_id, task in _active_interviews.items():
-        if not task.done():
-            logger.info(f"Cancelling interview {interview_id}")
-            task.cancel()
-
-    # Wait for all tasks to complete
-    if _active_interviews:
-        await asyncio.gather(*_active_interviews.values(), return_exceptions=True)
-
-    _active_interviews.clear()
-    logger.info("All interview tasks shutdown complete")
-
-
-def get_active_interview_count() -> int:
-    """Get the number of currently active interviews.
-
-    Returns:
-        Number of interviews currently running.
-    """
-    return len(_active_interviews)
-
-
-def is_interview_active(interview_id: UUID) -> bool:
-    """Check if an interview is currently active.
-
-    Args:
-        interview_id: UUID of the interview.
-
-    Returns:
-        True if an interview is active, False otherwise.
-    """
-    return interview_id in _active_interviews
+    logger.info("Voice worker shutdown complete")
