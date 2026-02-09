@@ -465,6 +465,21 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
         raise
 
 
+@register_job("send_invitation_email")
+async def handle_send_invitation_email(payload: dict, db: AsyncSession) -> None:
+    """Send an invitation email via the job queue."""
+    from boswell.server.email import send_invitation_email
+
+    success = await send_invitation_email(
+        to=payload["to"],
+        guest_name=payload["guest_name"],
+        interview_topic=payload["interview_topic"],
+        magic_link=payload["magic_link"],
+    )
+    if not success:
+        raise RuntimeError(f"Failed to send invitation email to {payload['to']}")
+
+
 @register_job("send_email")
 async def handle_send_email(payload: dict, db: AsyncSession) -> None:
     """Send an email notification.

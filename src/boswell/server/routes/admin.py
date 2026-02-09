@@ -1078,17 +1078,25 @@ async def invite_submit(
 
     await db.flush()
 
-    # Send invitation emails
+    # Enqueue invitation emails via job queue
+    from boswell.server.jobs import enqueue_job
+
     settings = get_settings()
     for interview_obj in new_interviews:
         if interview_obj.email:
             magic_link = f"{settings.base_url}/i/{interview_obj.magic_token}"
-            await send_invitation_email(
-                to=interview_obj.email,
-                guest_name=interview_obj.name,
-                interview_topic=project.topic,
-                magic_link=magic_link,
+            await enqueue_job(
+                db,
+                job_type="send_invitation_email",
+                payload={
+                    "to": interview_obj.email,
+                    "guest_name": interview_obj.name,
+                    "interview_topic": project.topic,
+                    "magic_link": magic_link,
+                },
             )
+
+    await db.commit()
 
     return RedirectResponse(
         url=f"/admin/projects/{project_id}",
@@ -1472,22 +1480,30 @@ async def bulk_remind_interviews(
     )
     interviews = result.scalars().all()
 
+    from boswell.server.jobs import enqueue_job
+
     settings = get_settings()
-    sent_count = 0
+    enqueue_count = 0
     for interview in interviews:
         if interview.email:
             magic_link = f"{settings.base_url}/i/{interview.magic_token}"
-            await send_invitation_email(
-                to=interview.email,
-                guest_name=interview.name,
-                interview_topic=project.topic,
-                magic_link=magic_link,
+            await enqueue_job(
+                db,
+                job_type="send_invitation_email",
+                payload={
+                    "to": interview.email,
+                    "guest_name": interview.name,
+                    "interview_topic": project.topic,
+                    "magic_link": magic_link,
+                },
             )
-            sent_count += 1
+            enqueue_count += 1
 
-    logger.info(f"Sent {sent_count} reminder emails for project {project_id}")
+    await db.commit()
 
-    return JSONResponse({"sent": sent_count, "total": len(interview_ids)})
+    logger.info(f"Queued {enqueue_count} reminder emails for project {project_id}")
+
+    return JSONResponse({"queued": enqueue_count, "total": len(interview_ids)})
 
 
 @router.post("/projects/{project_id}/interviews/bulk-followup")
