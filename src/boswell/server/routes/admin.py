@@ -2,6 +2,7 @@
 """Admin routes for dashboard and interview management."""
 
 import asyncio
+import base64
 import csv
 import io
 import logging
@@ -181,16 +182,18 @@ async def project_new_submit(
             status_code=400, detail="Duration must be between 5 and 120 minutes"
         )
 
-    # Save uploaded files to temp for async processing
-    research_file_paths = []
+    # Read uploaded files into memory for async processing via job queue.
+    # File content is stored as base64 in the job payload so it can be
+    # processed by the jobs worker in a separate container.
+    research_file_data = []
     if research_files and INGESTION_AVAILABLE:
         for upload_file in research_files:
             if upload_file.filename and upload_file.size and upload_file.size > 0:
-                suffix = Path(upload_file.filename).suffix
-                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                    content = await upload_file.read()
-                    tmp.write(content)
-                    research_file_paths.append({"path": tmp.name, "name": upload_file.filename})
+                content = await upload_file.read()
+                research_file_data.append({
+                    "name": upload_file.filename,
+                    "content_b64": base64.b64encode(content).decode("ascii"),
+                })
 
     # Parse research URLs
     research_url_list = []
@@ -201,7 +204,7 @@ async def project_new_submit(
         ]
 
     # Determine if async processing is needed
-    has_research = bool(research_file_paths or research_url_list)
+    has_research = bool(research_file_data or research_url_list)
     processing_status = "pending" if has_research else "ready"
 
     # Store URL list in research_links (just the URLs, not content)
@@ -252,7 +255,7 @@ async def project_new_submit(
             payload={
                 "project_id": str(project.id),
                 "research_urls": research_url_list,
-                "research_file_paths": research_file_paths,
+                "research_file_data": research_file_data,
                 "topic": topic,
             },
         )

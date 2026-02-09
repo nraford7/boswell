@@ -411,20 +411,27 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
     project.processing_status = "processing"
     await db.flush()
 
-    file_paths = payload.get("research_file_paths", [])
     try:
         research_parts = []
 
-        # Process files
-        for file_info in file_paths:
+        # Process files (content passed as base64 in job payload)
+        for file_info in payload.get("research_file_data", []):
             try:
-                doc_content = await asyncio.to_thread(read_document, Path(file_info["path"]))
-                if doc_content:
-                    research_parts.append(f"=== Document: {file_info['name']} ===\n{doc_content}")
+                import base64
+                import tempfile
+                content_bytes = base64.b64decode(file_info["content_b64"])
+                suffix = Path(file_info["name"]).suffix
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(content_bytes)
+                    tmp_path = Path(tmp.name)
+                try:
+                    doc_content = await asyncio.to_thread(read_document, tmp_path)
+                    if doc_content:
+                        research_parts.append(f"=== Document: {file_info['name']} ===\n{doc_content}")
+                finally:
+                    tmp_path.unlink(missing_ok=True)
             except Exception as e:
                 logger.warning(f"Failed to process file {file_info['name']}: {e}")
-            finally:
-                Path(file_info["path"]).unlink(missing_ok=True)
 
         # Process URLs
         for url in payload.get("research_urls", []):
@@ -464,13 +471,6 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
     except Exception as e:
         project.processing_status = "failed"
         raise
-    finally:
-        # Clean up any remaining temp files (handles early failures)
-        for file_info in file_paths:
-            try:
-                Path(file_info["path"]).unlink(missing_ok=True)
-            except Exception:
-                pass
 
 
 @register_job("send_invitation_email")

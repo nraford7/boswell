@@ -16,7 +16,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -102,6 +102,10 @@ MAX_FAILURES = 4
 
 # Maximum concurrent interview tasks per worker
 MAX_CONCURRENT = int(os.environ.get("WORKER_MAX_CONCURRENT", "3"))
+
+# Stale claim timeout: if a claim is older than this, treat it as abandoned
+# (covers hard crashes where shutdown_voice_worker never runs)
+STALE_CLAIM_SECONDS = int(os.environ.get("WORKER_STALE_CLAIM_SECONDS", "1800"))  # 30 minutes
 
 
 def _extract_questions_list(project: Project) -> list[str]:
@@ -548,7 +552,8 @@ async def claim_next_interview(db: AsyncSession) -> Interview | None:
     """Atomically claim the next interview ready to run.
 
     Uses SELECT ... FOR UPDATE SKIP LOCKED to prevent duplicate claims
-    across multiple worker instances.
+    across multiple worker instances. Also reclaims interviews with stale
+    claims (older than STALE_CLAIM_SECONDS) to recover from hard crashes.
 
     Args:
         db: Database session.
@@ -556,14 +561,22 @@ async def claim_next_interview(db: AsyncSession) -> Interview | None:
     Returns:
         The claimed Interview, or None if nothing is available.
     """
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
+
     stmt = (
         select(Interview)
         .where(
             and_(
                 Interview.status == InterviewStatus.started,
                 Interview.room_name.isnot(None),
-                Interview.claimed_by.is_(None),
-                (Interview.next_retry_at.is_(None)) | (Interview.next_retry_at <= datetime.now(timezone.utc)),
+                or_(
+                    # Unclaimed interviews
+                    Interview.claimed_by.is_(None),
+                    # Stale claims from crashed workers
+                    Interview.claimed_at < stale_cutoff,
+                ),
+                (Interview.next_retry_at.is_(None)) | (Interview.next_retry_at <= now),
             )
         )
         .order_by(Interview.started_at)
@@ -574,8 +587,13 @@ async def claim_next_interview(db: AsyncSession) -> Interview | None:
     interview = result.scalar_one_or_none()
 
     if interview:
+        if interview.claimed_by and interview.claimed_by != WORKER_ID:
+            logger.warning(
+                f"Reclaiming stale interview {interview.id} "
+                f"(was claimed by {interview.claimed_by} at {interview.claimed_at})"
+            )
         interview.claimed_by = WORKER_ID
-        interview.claimed_at = datetime.now(timezone.utc)
+        interview.claimed_at = now
         await db.flush()
         logger.info(f"Claimed interview {interview.id} (worker={WORKER_ID})")
 
