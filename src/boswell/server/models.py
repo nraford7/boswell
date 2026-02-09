@@ -236,6 +236,8 @@ class Interview(Base):
     )
     session_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     interview_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="interviews")

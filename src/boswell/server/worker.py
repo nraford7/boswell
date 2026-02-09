@@ -11,7 +11,7 @@ import logging
 import os
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -95,6 +95,10 @@ def get_effective_interview_config(interview, template):
 
 # Worker identity for claim tracking
 WORKER_ID = f"{socket.gethostname()}-{os.getpid()}"
+
+# Retry backoff configuration
+BACKOFF_SECONDS = [30, 120, 600, 1800]  # 30s, 2m, 10m, 30m
+MAX_FAILURES = 4
 
 # Maximum concurrent interview tasks per worker
 MAX_CONCURRENT = int(os.environ.get("WORKER_MAX_CONCURRENT", "3"))
@@ -355,6 +359,8 @@ async def complete_interview(
     if interview:
         interview.status = InterviewStatus.completed
         interview.completed_at = datetime.now(timezone.utc)
+        interview.failure_count = 0
+        interview.next_retry_at = None
         if mode:
             interview.interview_mode = mode
         await db.flush()
@@ -503,7 +509,6 @@ async def run_interview_task(interview_id: UUID) -> None:
 
     except Exception as e:
         logger.exception(f"Interview failed for {interview_id}: {e}")
-        # Release claim so it can be retried
         try:
             async with get_session_context() as db:
                 result = await db.execute(
@@ -513,9 +518,25 @@ async def run_interview_task(interview_id: UUID) -> None:
                 if interview:
                     interview.claimed_by = None
                     interview.claimed_at = None
+                    interview.failure_count = (interview.failure_count or 0) + 1
+
+                    if interview.failure_count >= MAX_FAILURES:
+                        interview.status = InterviewStatus.expired
+                        logger.error(
+                            f"Interview {interview_id} failed {MAX_FAILURES} times, marking expired"
+                        )
+                    else:
+                        backoff_idx = min(interview.failure_count - 1, len(BACKOFF_SECONDS) - 1)
+                        interview.next_retry_at = datetime.now(timezone.utc) + timedelta(
+                            seconds=BACKOFF_SECONDS[backoff_idx]
+                        )
+                        logger.warning(
+                            f"Interview {interview_id} failed (count={interview.failure_count}), "
+                            f"retry after {BACKOFF_SECONDS[backoff_idx]}s"
+                        )
                     await db.commit()
         except Exception as release_err:
-            logger.error(f"Failed to release claim for {interview_id}: {release_err}")
+            logger.error(f"Failed to update failure state for {interview_id}: {release_err}")
 
     finally:
         logger.info(f"Interview task ended for {interview_id}")
@@ -541,6 +562,7 @@ async def claim_next_interview(db: AsyncSession) -> Interview | None:
                 Interview.status == InterviewStatus.started,
                 Interview.room_name.isnot(None),
                 Interview.claimed_by.is_(None),
+                (Interview.next_retry_at.is_(None)) | (Interview.next_retry_at <= datetime.now(timezone.utc)),
             )
         )
         .order_by(Interview.started_at)
