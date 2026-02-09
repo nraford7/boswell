@@ -1,5 +1,22 @@
 """System prompts for the Boswell interview bot."""
 
+# Maximum characters for research context in system prompt
+# ~4 chars per token, budget 2000 tokens for research
+MAX_RESEARCH_CHARS = 8000
+MAX_TRANSCRIPT_CHARS = 4000
+
+
+def _truncate_context(text: str, max_chars: int) -> str:
+    """Truncate text to fit within character budget."""
+    if not text or len(text) <= max_chars:
+        return text or ""
+    truncated = text[:max_chars]
+    last_period = truncated.rfind(".")
+    if last_period > max_chars * 0.7:
+        truncated = truncated[:last_period + 1]
+    return truncated + "\n[... truncated for context budget ...]"
+
+
 ANGLE_PROMPTS = {
     "exploratory": """
 INTERVIEW APPROACH: Exploratory
@@ -80,9 +97,10 @@ def build_system_prompt(
 
     research_section = ""
     if research_summary:
+        budgeted = _truncate_context(research_summary, MAX_RESEARCH_CHARS)
         research_section = f"""
 PROJECT RESEARCH:
-{research_summary}
+{budgeted}
 
 """
 
@@ -263,6 +281,9 @@ def build_returning_guest_prompt(
             transcript_text += f"{guest_name}: {text}\n"
         else:
             transcript_text += f"Boswell: {text}\n"
+
+    # Apply budget to prevent overly long transcripts
+    transcript_text = _truncate_context(transcript_text, MAX_TRANSCRIPT_CHARS)
 
     return f"""
 RETURNING GUEST - IMPORTANT:
