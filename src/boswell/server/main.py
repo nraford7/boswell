@@ -52,6 +52,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enable gzip compression for responses
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # Templates
 templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
 
