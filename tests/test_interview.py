@@ -26,14 +26,15 @@ class TestInterviewStatus:
         assert InterviewStatus.PENDING == "pending"
         assert InterviewStatus.WAITING == "waiting"
         assert InterviewStatus.IN_PROGRESS == "in_progress"
+        assert InterviewStatus.PAUSED == "paused"
         assert InterviewStatus.PROCESSING == "processing"
         assert InterviewStatus.COMPLETE == "complete"
         assert InterviewStatus.NO_SHOW == "no_show"
         assert InterviewStatus.ERROR == "error"
 
     def test_status_count(self):
-        """Test that we have exactly 7 statuses."""
-        assert len(InterviewStatus) == 7
+        """Test that we have exactly 8 statuses."""
+        assert len(InterviewStatus) == 8
 
 
 class TestInterview:

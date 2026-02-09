@@ -231,6 +231,7 @@ class TestValidateApiKeys:
             "claude_api_key": False,
             "elevenlabs_api_key": False,
             "deepgram_api_key": False,
+            "daily_api_key": False,
             "meetingbaas_api_key": False,
         }
 
@@ -240,6 +241,7 @@ class TestValidateApiKeys:
             claude_api_key="sk-test",
             elevenlabs_api_key="el-test",
             deepgram_api_key="dg-test",
+            daily_api_key="daily-test",
             meetingbaas_api_key="mb-test",
         )
 
@@ -249,6 +251,7 @@ class TestValidateApiKeys:
             "claude_api_key": True,
             "elevenlabs_api_key": True,
             "deepgram_api_key": True,
+            "daily_api_key": True,
             "meetingbaas_api_key": True,
         }
 
@@ -265,6 +268,7 @@ class TestValidateApiKeys:
             "claude_api_key": True,
             "elevenlabs_api_key": False,
             "deepgram_api_key": True,
+            "daily_api_key": False,
             "meetingbaas_api_key": False,
         }
 
