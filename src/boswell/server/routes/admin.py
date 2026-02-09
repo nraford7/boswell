@@ -256,7 +256,8 @@ async def project_new_submit(
                 "topic": topic,
             },
         )
-        await db.commit()
+
+    await db.commit()
 
     # Redirect to project detail page
     return RedirectResponse(

@@ -411,11 +411,12 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
     project.processing_status = "processing"
     await db.flush()
 
+    file_paths = payload.get("research_file_paths", [])
     try:
         research_parts = []
 
         # Process files
-        for file_info in payload.get("research_file_paths", []):
+        for file_info in file_paths:
             try:
                 doc_content = await asyncio.to_thread(read_document, Path(file_info["path"]))
                 if doc_content:
@@ -463,6 +464,13 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
     except Exception as e:
         project.processing_status = "failed"
         raise
+    finally:
+        # Clean up any remaining temp files (handles early failures)
+        for file_info in file_paths:
+            try:
+                Path(file_info["path"]).unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 @register_job("send_invitation_email")

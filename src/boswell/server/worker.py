@@ -361,6 +361,8 @@ async def complete_interview(
         interview.completed_at = datetime.now(timezone.utc)
         interview.failure_count = 0
         interview.next_retry_at = None
+        interview.claimed_by = None
+        interview.claimed_at = None
         if mode:
             interview.interview_mode = mode
         await db.flush()
@@ -556,7 +558,6 @@ async def claim_next_interview(db: AsyncSession) -> Interview | None:
     """
     stmt = (
         select(Interview)
-        .options(selectinload(Interview.project))
         .where(
             and_(
                 Interview.status == InterviewStatus.started,
