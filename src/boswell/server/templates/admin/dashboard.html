@@ -186,8 +186,9 @@
     {% if projects %}
     <div class="projects-grid">
         {% for project in projects %}
-        {% set total_interviews = project.interviews|length %}
-        {% set completed = project.interviews|selectattr('status.value', 'equalto', 'completed')|list|length %}
+        {% set counts = counts_by_project.get(project.id) %}
+        {% set total_interviews = counts.total if counts else 0 %}
+        {% set completed = counts.completed if counts else 0 %}
         {% set pending = total_interviews - completed %}
         <a href="/admin/projects/{{ project.id }}" class="project-card">
             <div class="project-topic">{{ project.name or project.topic }}</div>

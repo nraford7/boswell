@@ -87,16 +87,32 @@ async def dashboard(
     db: AsyncSession = Depends(get_session),
 ):
     """Dashboard home page showing list of projects for the user's team."""
-    # Query projects for the user's team with related data
+    # Query projects without eager loading interviews
     result = await db.execute(
         select(Project)
         .where(Project.team_id == user.team_id)
-        .options(
-            selectinload(Project.interviews),
-        )
         .order_by(Project.created_at.desc())
     )
     projects = result.scalars().all()
+
+    # Get interview counts per project in one aggregate query
+    project_ids = [p.id for p in projects]
+    counts_by_project = {}
+    if project_ids:
+        from sqlalchemy import func, case
+        count_stmt = (
+            select(
+                Interview.project_id,
+                func.count(Interview.id).label("total"),
+                func.count(case((Interview.status == InterviewStatus.completed, 1))).label("completed"),
+                func.count(case((Interview.status == InterviewStatus.invited, 1))).label("invited"),
+                func.count(case((Interview.status == InterviewStatus.started, 1))).label("started"),
+            )
+            .where(Interview.project_id.in_(project_ids))
+            .group_by(Interview.project_id)
+        )
+        count_result = await db.execute(count_stmt)
+        counts_by_project = {row.project_id: row for row in count_result}
 
     return templates.TemplateResponse(
         request=request,
@@ -104,6 +120,7 @@ async def dashboard(
         context={
             "user": user,
             "projects": projects,
+            "counts_by_project": counts_by_project,
         },
     )
 
@@ -256,13 +273,12 @@ async def project_detail(
     db: AsyncSession = Depends(get_session),
 ):
     """Project detail page showing project info and interview list."""
-    # Fetch project with related data
+    # Fetch project with interviews (no transcript/analysis eager loading)
     result = await db.execute(
         select(Project)
         .where(Project.id == project_id)
         .options(
-            selectinload(Project.interviews).selectinload(Interview.transcript),
-            selectinload(Project.interviews).selectinload(Interview.analysis),
+            selectinload(Project.interviews),
         )
     )
     project = result.scalar_one_or_none()
