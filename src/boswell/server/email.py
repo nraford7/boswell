@@ -4,6 +4,7 @@ This module provides a unified interface for sending emails using the
 Resend API for transactional email delivery.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -64,7 +65,7 @@ async def send_email(
             params["html"] = html
 
         logger.info(f"Sending email to {to} from {settings.sender_email}")
-        response = resend.Emails.send(params)
+        response = await asyncio.to_thread(resend.Emails.send, params)
 
         email_id = response.get('id') if isinstance(response, dict) else getattr(response, 'id', 'unknown')
         logger.info(
