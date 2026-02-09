@@ -1,6 +1,7 @@
 """Audio diagnostics processor for debugging audio flow."""
 
 import logging
+import os
 from pipecat.frames.frames import (
     Frame,
     AudioRawFrame,
@@ -11,6 +12,8 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 logger = logging.getLogger(__name__)
+
+AUDIO_DEBUG = os.environ.get("AUDIO_DEBUG", "").lower() in ("1", "true", "yes")
 
 
 class AudioDiagnosticsProcessor(FrameProcessor):
@@ -32,6 +35,9 @@ class AudioDiagnosticsProcessor(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Log frame types as they flow through."""
+        if not AUDIO_DEBUG:
+            await self.push_frame(frame, direction)
+            return
 
         if isinstance(frame, TextFrame):
             self._text_frame_count += 1

@@ -1,6 +1,7 @@
 """Pipecat pipeline setup for Boswell voice interviews."""
 
 import logging
+import os
 from typing import Any, Callable
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -155,8 +156,10 @@ async def create_pipeline(
     # Set up mode detection for returning guests
     mode_detection_processor = ModeDetectionProcessor()
 
-    # Set up audio diagnostics for debugging
-    audio_diagnostics = AudioDiagnosticsProcessor()
+    # Set up audio diagnostics for debugging (only if AUDIO_DEBUG enabled)
+    audio_diagnostics = None
+    if os.environ.get("AUDIO_DEBUG", "").lower() in ("1", "true", "yes"):
+        audio_diagnostics = AudioDiagnosticsProcessor()
 
     # Set up display text for frontend question display
     display_text_processor = DisplayTextProcessor(transport)
@@ -166,26 +169,33 @@ async def create_pipeline(
 
     # Build the pipeline
     # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> strike -> speed -> bot_collector -> tts -> [DIAGNOSTICS] -> output
-    pipeline = Pipeline(
-        [
-            transport.input(),
-            stt,
-            transcript_collector,  # Capture guest speech after STT
-            acknowledgment_processor,  # Immediate filler acknowledgment
-            context_aggregator.user(),
-            llm,
-            strike_control_processor,  # Process strike tags and mark transcript
-            speed_control_processor,  # Process speed tags and adjust TTS
-            mode_detection_processor,  # Detect mode tags for returning guests
-            bot_response_collector,  # Capture bot responses after LLM
-            display_text_processor,  # Send questions to frontend display
-            tts,
-            audio_diagnostics,  # DEBUG: Log audio frames before output
-            # speaking_state_processor,  # Disabled - latency issues
-            transport.output(),
-            context_aggregator.assistant(),
-        ]
-    )
+    pipeline_processors = [
+        transport.input(),
+        stt,
+        transcript_collector,  # Capture guest speech after STT
+        acknowledgment_processor,  # Immediate filler acknowledgment
+        context_aggregator.user(),
+        llm,
+        strike_control_processor,  # Process strike tags and mark transcript
+        speed_control_processor,  # Process speed tags and adjust TTS
+        mode_detection_processor,  # Detect mode tags for returning guests
+        bot_response_collector,  # Capture bot responses after LLM
+        display_text_processor,  # Send questions to frontend display
+        tts,
+    ]
+
+    # Add audio diagnostics if enabled
+    if audio_diagnostics:
+        pipeline_processors.append(audio_diagnostics)
+
+    # speaking_state_processor disabled - latency issues
+    # Add final processors
+    pipeline_processors.extend([
+        transport.output(),
+        context_aggregator.assistant(),
+    ])
+
+    pipeline = Pipeline(pipeline_processors)
 
     # Create task with pipeline
     task = PipelineTask(
