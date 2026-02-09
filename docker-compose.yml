@@ -82,6 +82,33 @@ services:
     restart: unless-stopped
 
   # ==========================================================================
+  # Jobs Worker Service
+  # ==========================================================================
+  # Polls the job_queue table and processes background tasks:
+  # analysis generation, email sending, question generation.
+  # No HTTP interface - communicates via database.
+  jobs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: boswell-jobs
+    command: ["./scripts/start_jobs.sh"]
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to use the local container
+      DATABASE_URL: postgresql+asyncpg://boswell:boswell@db:5432/boswell
+    volumes:
+      # Mount source for development
+      - ./src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+  # ==========================================================================
   # Room UI (React/Vite)
   # ==========================================================================
   # Development server for the room-ui React application.
