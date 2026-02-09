@@ -164,54 +164,31 @@ async def project_new_submit(
             status_code=400, detail="Duration must be between 5 and 120 minutes"
         )
 
-    # Process research materials
-    research_parts = []
-    questions = None
-
-    # Process uploaded files
+    # Save uploaded files to temp for async processing
+    research_file_paths = []
     if research_files and INGESTION_AVAILABLE:
         for upload_file in research_files:
             if upload_file.filename and upload_file.size and upload_file.size > 0:
-                try:
-                    # Save to temp file and process
-                    suffix = Path(upload_file.filename).suffix
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                        content = await upload_file.read()
-                        tmp.write(content)
-                        tmp_path = tmp.name
+                suffix = Path(upload_file.filename).suffix
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    content = await upload_file.read()
+                    tmp.write(content)
+                    research_file_paths.append({"path": tmp.name, "name": upload_file.filename})
 
-                    # Read the document
-                    doc_content = await asyncio.to_thread(read_document, Path(tmp_path))
-                    if doc_content:
-                        research_parts.append(f"=== Document: {upload_file.filename} ===\n{doc_content}")
-
-                    # Clean up temp file
-                    Path(tmp_path).unlink(missing_ok=True)
-                except Exception as e:
-                    logger.warning(f"Failed to process file {upload_file.filename}: {e}")
-
-    # Process URLs
-    if research_urls and INGESTION_AVAILABLE:
-        urls = [u.strip() for u in research_urls.split("\n") if u.strip()]
-        for url in urls:
-            if url.startswith("http://") or url.startswith("https://"):
-                try:
-                    url_content = await asyncio.to_thread(fetch_url, url)
-                    if url_content:
-                        research_parts.append(f"=== URL: {url} ===\n{url_content}")
-                except Exception as e:
-                    logger.warning(f"Failed to fetch URL {url}: {e}")
-
-    # Combine research summary
-    research_summary = "\n\n".join(research_parts) if research_parts else None
-
-    # Store URLs in research_links
-    research_links = []
+    # Parse research URLs
+    research_url_list = []
     if research_urls:
-        urls = [u.strip() for u in research_urls.split("\n") if u.strip()]
-        for url in urls:
-            if url.startswith("http://") or url.startswith("https://"):
-                research_links.append(url)
+        research_url_list = [
+            u.strip() for u in research_urls.split("\n")
+            if u.strip() and (u.strip().startswith("http://") or u.strip().startswith("https://"))
+        ]
+
+    # Determine if async processing is needed
+    has_research = bool(research_file_paths or research_url_list)
+    processing_status = "pending" if has_research else "ready"
+
+    # Store URL list in research_links (just the URLs, not content)
+    research_links = research_url_list if research_url_list else []
 
     # Clean optional string fields
     public_desc = public_description.strip() if public_description else None
@@ -233,25 +210,6 @@ async def project_new_submit(
         except ValueError:
             pass  # Invalid UUID, ignore
 
-    # Only generate questions if NO template is selected
-    # When a template is selected, its questions will be used by the worker
-    if not parsed_template_id and INGESTION_AVAILABLE:
-        try:
-            # Use research summary if available, otherwise just use topic
-            research_content = research_summary or ""
-            questions_list = await asyncio.to_thread(
-                generate_questions, topic, research_content, 12
-            )
-            if questions_list:
-                questions = {
-                    "questions": [
-                        {"id": i + 1, "text": q, "type": "generated"}
-                        for i, q in enumerate(questions_list)
-                    ]
-                }
-        except Exception as e:
-            logger.warning(f"Failed to generate questions: {e}")
-
     # Create the project (WITHOUT interview)
     project = Project(
         team_id=user.team_id,
@@ -262,12 +220,26 @@ async def project_new_submit(
         intro_prompt=intro if intro else None,
         target_minutes=target_minutes,
         created_by=user.id,
-        research_summary=research_summary,
+        processing_status=processing_status,
         research_links=research_links if research_links else None,
-        questions=questions,
     )
     db.add(project)
     await db.flush()
+
+    # Enqueue async research processing if needed
+    if has_research:
+        from boswell.server.jobs import enqueue_job
+        await enqueue_job(
+            db,
+            job_type="process_project_research",
+            payload={
+                "project_id": str(project.id),
+                "research_urls": research_url_list,
+                "research_file_paths": research_file_paths,
+                "topic": topic,
+            },
+        )
+        await db.commit()
 
     # Redirect to project detail page
     return RedirectResponse(

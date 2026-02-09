@@ -373,6 +373,98 @@ def _generate_stub_questions(topic: str, target_minutes: int) -> list[dict]:
     return questions[:num_questions]
 
 
+@register_job("process_project_research")
+async def handle_process_project_research(payload: dict, db: AsyncSession) -> None:
+    """Process research materials and generate questions for a project.
+
+    Reads uploaded files and fetches URLs, then generates questions using
+    the ingestion module. Updates the project record with research summary,
+    research links, and generated questions.
+
+    Expected payload:
+        - project_id: UUID of the project
+        - research_file_paths: List of {"path": str, "name": str} dicts
+        - research_urls: List of URL strings
+        - topic: The project topic for question generation
+
+    Raises:
+        ValueError: If project not found.
+    """
+    from pathlib import Path
+
+    # Try to import ingestion functions
+    try:
+        from boswell.ingestion import read_document, fetch_url, generate_questions
+    except ImportError:
+        logger.warning("Ingestion module not available")
+        return
+
+    project_id = UUID(payload["project_id"])
+
+    stmt = select(Project).where(Project.id == project_id)
+    result = await db.execute(stmt)
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise ValueError(f"Project not found: {project_id}")
+
+    project.processing_status = "processing"
+    await db.flush()
+
+    try:
+        research_parts = []
+
+        # Process files
+        for file_info in payload.get("research_file_paths", []):
+            try:
+                doc_content = await asyncio.to_thread(read_document, Path(file_info["path"]))
+                if doc_content:
+                    research_parts.append(f"=== Document: {file_info['name']} ===\n{doc_content}")
+            except Exception as e:
+                logger.warning(f"Failed to process file {file_info['name']}: {e}")
+            finally:
+                Path(file_info["path"]).unlink(missing_ok=True)
+
+        # Process URLs
+        for url in payload.get("research_urls", []):
+            try:
+                url_content = await asyncio.to_thread(fetch_url, url)
+                if url_content:
+                    research_parts.append(f"=== URL: {url} ===\n{url_content}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch URL {url}: {e}")
+
+        research_summary = "\n\n".join(research_parts) if research_parts else None
+        project.research_summary = research_summary
+
+        # Store URLs in research_links
+        research_urls = payload.get("research_urls", [])
+        if research_urls:
+            project.research_links = research_urls
+
+        # Generate questions if no template set
+        if not project.template_id:
+            try:
+                research_content = research_summary or ""
+                questions_list = await asyncio.to_thread(
+                    generate_questions, payload["topic"], research_content, 12
+                )
+                if questions_list:
+                    project.questions = {
+                        "questions": [
+                            {"id": i + 1, "text": q, "type": "generated"}
+                            for i, q in enumerate(questions_list)
+                        ]
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to generate questions: {e}")
+
+        project.processing_status = "ready"
+    except Exception as e:
+        project.processing_status = "failed"
+        raise
+
+
 @register_job("send_email")
 async def handle_send_email(payload: dict, db: AsyncSession) -> None:
     """Send an email notification.
