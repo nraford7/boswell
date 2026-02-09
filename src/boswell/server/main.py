@@ -7,10 +7,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
 from starlette.staticfiles import StaticFiles
 
-from boswell.server.database import close_db, get_session_context, init_db
+from boswell.server.database import close_db
 
 logger = logging.getLogger(__name__)
 
@@ -21,27 +20,7 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup - run any pending migrations
-    try:
-        async with get_session_context() as db:
-            # Check if topic column needs migration from varchar to text
-            result = await db.execute(text("""
-                SELECT data_type, character_maximum_length
-                FROM information_schema.columns
-                WHERE table_name = 'interviews' AND column_name = 'topic'
-            """))
-            row = result.fetchone()
-            if row and row[1] is not None:  # character_maximum_length is set (varchar)
-                await db.execute(text(
-                    "ALTER TABLE interviews ALTER COLUMN topic TYPE TEXT"
-                ))
-                await db.commit()
-                logger.info("Applied migration: topic column to TEXT")
-    except Exception as e:
-        logger.warning(f"Migration check failed: {e}")
-
     yield
-    # Shutdown
     await close_db()
 
 
