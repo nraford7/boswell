@@ -1,6 +1,7 @@
 # src/boswell/server/routes/auth.py
 """Authentication routes with magic link login."""
 
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -14,7 +15,7 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
-from boswell.server.models import Team, User
+from boswell.server.models import Team, User, AccountInvite, ProjectShare, ProjectRole, _hash_token
 from passlib.context import CryptContext
 
 router = APIRouter()
@@ -261,4 +262,166 @@ async def logout(request: Request):
     """Clear the session cookie and redirect to login."""
     response = RedirectResponse(url="/admin/login", status_code=303)
     response.delete_cookie(key="session")
+    return response
+
+
+@router.get("/invite/{token}")
+async def invite_page(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Show the invite claim page."""
+    token_hash = _hash_token(token)
+    result = await db.execute(
+        select(AccountInvite).where(AccountInvite.token_hash == token_hash)
+    )
+    invite = result.scalar_one_or_none()
+
+    if not invite:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "Invalid invite link."},
+        )
+
+    now = datetime.now(timezone.utc)
+    if invite.claimed_at or invite.revoked_at or invite.expires_at < now:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "This invite has expired or already been used."},
+        )
+
+    # Check if user already exists
+    existing = await db.execute(select(User).where(User.email == invite.email))
+    existing_user = existing.scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/invite_claim.html",
+        context={
+            "invite": invite,
+            "existing_user": existing_user is not None,
+            "email": invite.email,
+            "token": token,
+            "message": None,
+        },
+    )
+
+
+@router.post("/invite/{token}")
+async def claim_invite(
+    request: Request,
+    token: str,
+    name: str = Form(""),
+    password: str = Form(""),
+    existing_password: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session),
+):
+    """Claim an invite — create account or link existing."""
+    token_hash = _hash_token(token)
+    result = await db.execute(
+        select(AccountInvite).where(AccountInvite.token_hash == token_hash)
+    )
+    invite = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if not invite or invite.claimed_at or invite.revoked_at or invite.expires_at < now:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "Invalid or expired invite."},
+        )
+
+    # Check for existing user
+    existing = await db.execute(select(User).where(User.email == invite.email))
+    user = existing.scalar_one_or_none()
+
+    if user:
+        # Existing user — verify password
+        if not user.password_hash or not existing_password:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/invite_claim.html",
+                context={
+                    "invite": invite,
+                    "existing_user": True,
+                    "email": invite.email,
+                    "token": token,
+                    "message": "Please enter your password to claim this invite.",
+                },
+            )
+        if not verify_password(existing_password, user.password_hash):
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/invite_claim.html",
+                context={
+                    "invite": invite,
+                    "existing_user": True,
+                    "email": invite.email,
+                    "token": token,
+                    "message": "Incorrect password.",
+                },
+            )
+    else:
+        # New user — create account
+        if not name.strip() or not password:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/invite_claim.html",
+                context={
+                    "invite": invite,
+                    "existing_user": False,
+                    "email": invite.email,
+                    "token": token,
+                    "message": "Name and password are required.",
+                },
+            )
+        user = User(
+            email=invite.email,
+            name=name.strip(),
+            password_hash=hash_password(password),
+            email_verified_at=now,
+        )
+        db.add(user)
+        await db.flush()
+
+    # Grant project share if invite has one (atomic with claim)
+    if invite.project_id and invite.role:
+        existing_share = await db.execute(
+            select(ProjectShare)
+            .where(ProjectShare.project_id == invite.project_id)
+            .where(ProjectShare.user_id == user.id)
+        )
+        share = existing_share.scalar_one_or_none()
+        if share:
+            share.role = invite.role
+            share.updated_at = now
+        else:
+            db.add(ProjectShare(
+                project_id=invite.project_id,
+                user_id=user.id,
+                role=invite.role,
+                granted_by=invite.invited_by,
+            ))
+
+    # Mark invite claimed
+    invite.claimed_at = now
+    invite.claimed_by_user_id = user.id
+
+    # Commit the database changes
+    await db.commit()
+
+    # Create session
+    session_token = create_session_token(user.id)
+    response = RedirectResponse(url="/admin/", status_code=303)
+    response.set_cookie(
+        key="session",
+        value=session_token,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=604800,
+    )
     return response
