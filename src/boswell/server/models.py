@@ -191,38 +191,12 @@ class AccountInvite(Base):
     )
 
 
-class Team(Base):
-    """A team that owns projects, templates, and users."""
-
-    __tablename__ = "teams"
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    # Relationships
-    users: Mapped[list["User"]] = relationship(
-        "User", back_populates="team", cascade="all, delete-orphan"
-    )
-    templates: Mapped[list["InterviewTemplate"]] = relationship(
-        "InterviewTemplate", back_populates="team", cascade="all, delete-orphan"
-    )
-    projects: Mapped[list["Project"]] = relationship(
-        "Project", back_populates="team", cascade="all, delete-orphan"
-    )
-
-
 class User(Base):
     """A user who can manage interviews within a team."""
 
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    team_id: Mapped[UUID] = mapped_column(
-        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
-    )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -233,9 +207,6 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    # Relationships
-    team: Mapped["Team"] = relationship("Team", back_populates="users")
-
 
 class InterviewTemplate(Base):
     """A reusable interview template with configuration."""
@@ -243,9 +214,6 @@ class InterviewTemplate(Base):
     __tablename__ = "interview_templates"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    team_id: Mapped[UUID] = mapped_column(
-        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
-    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     prompt_modifier: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -268,7 +236,6 @@ class InterviewTemplate(Base):
     )
 
     # Relationships
-    team: Mapped["Team"] = relationship("Team", back_populates="templates")
     interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="template"
     )
@@ -280,9 +247,6 @@ class Project(Base):
     __tablename__ = "interviews"  # Keep table name to avoid migration
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    team_id: Mapped[UUID] = mapped_column(
-        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
-    )
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     topic: Mapped[str] = mapped_column(Text, nullable=False)
     questions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -315,7 +279,6 @@ class Project(Base):
     )
 
     # Relationships
-    team: Mapped["Team"] = relationship("Team", back_populates="projects")
     interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="project", cascade="all, delete-orphan"
     )
