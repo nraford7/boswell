@@ -260,6 +260,9 @@ class InterviewTemplate(Base):
     )
     angle_custom: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     default_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    created_by: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
