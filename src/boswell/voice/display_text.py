@@ -46,6 +46,75 @@ SUMMARY_SPLIT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+SUMMARY_PREFIX_SKIP_WORDS = {
+    "who",
+    "what",
+    "when",
+    "where",
+    "why",
+    "how",
+    "which",
+    "can",
+    "could",
+    "would",
+    "will",
+    "do",
+    "does",
+    "did",
+    "is",
+    "are",
+    "was",
+    "were",
+    "have",
+    "has",
+    "had",
+    "tell",
+    "walk",
+    "talk",
+    "take",
+    "describe",
+    "share",
+    "explain",
+    "please",
+    "me",
+    "through",
+    "about",
+}
+
+SUMMARY_DROP_WORDS = {
+    "i",
+    "you",
+    "your",
+    "we",
+    "our",
+    "me",
+    "my",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+    "were",
+    "do",
+    "does",
+    "did",
+    "can",
+    "could",
+    "would",
+    "will",
+    "have",
+    "has",
+    "had",
+    "to",
+    "this",
+    "that",
+    "these",
+    "those",
+}
+
+MAX_SUMMARY_WORDS = 5
+
 
 class DisplayTextProcessor(FrameProcessor):
     """Extracts questions from LLM responses and sends them to frontend.
@@ -107,7 +176,7 @@ class DisplayTextProcessor(FrameProcessor):
         return None
 
     def _summarize_question(self, question: str) -> str:
-        """Create a high-level, readable summary for on-screen display."""
+        """Create a short, pithy topic summary for on-screen display."""
         text = re.sub(r"\s+", " ", question).strip()
         text = LEADING_FILLER_PATTERN.sub("", text).strip()
         text = text.rstrip("?!. ")
@@ -124,7 +193,22 @@ class DisplayTextProcessor(FrameProcessor):
         if not summary:
             summary = text
 
-        return summary[0].upper() + summary[1:] if summary else question.strip()
+        words = summary.split()
+        while words and words[0].lower() in SUMMARY_PREFIX_SKIP_WORDS:
+            words.pop(0)
+
+        filtered_words = [w for w in words if w.lower() not in SUMMARY_DROP_WORDS]
+        if filtered_words:
+            words = filtered_words
+
+        if not words:
+            words = [w for w in re.findall(r"\b[\w']+\b", text) if w]
+
+        pithy = " ".join(words[:MAX_SUMMARY_WORDS]).strip(" ,;")
+        if not pithy:
+            pithy = question.strip()
+
+        return pithy[0].upper() + pithy[1:] if pithy else question.strip()
 
     async def _maybe_send_latest_question(self) -> None:
         """Detect and send new question text if it changed."""

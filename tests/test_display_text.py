@@ -58,13 +58,13 @@ class TestSummarizeQuestion:
 
     def test_keeps_short_question_readable(self):
         summary = self.processor._summarize_question("What problem are you trying to solve?")
-        assert summary == "What problem are you trying to solve"
+        assert summary == "Problem trying solve"
 
     def test_converts_to_high_level_summary(self):
         summary = self.processor._summarize_question(
             "Can you walk me through how your team evaluates product decisions across multiple stakeholder groups and deadlines?"
         )
-        assert summary == "How your team evaluates product decisions across multiple stakeholder groups"
+        assert summary == "Team evaluates product decisions across"
 
 
 class TestSendQuestion:

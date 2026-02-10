@@ -20,6 +20,24 @@ const summaryLeadPatterns = [
   /^help\s+me\s+understand\s+/i,
 ]
 
+const summaryPrefixSkipWords = new Set([
+  'who', 'what', 'when', 'where', 'why', 'how', 'which',
+  'can', 'could', 'would', 'will', 'do', 'does', 'did',
+  'is', 'are', 'was', 'were', 'have', 'has', 'had',
+  'tell', 'walk', 'talk', 'take', 'describe', 'share', 'explain',
+  'please', 'me', 'through', 'about',
+])
+
+const summaryDropWords = new Set([
+  'i', 'you', 'your', 'we', 'our', 'me', 'my',
+  'the', 'a', 'an',
+  'is', 'are', 'was', 'were', 'do', 'does', 'did',
+  'can', 'could', 'would', 'will', 'have', 'has', 'had',
+  'to', 'this', 'that', 'these', 'those',
+])
+
+const maxSummaryWords = 5
+
 function summarizeQuestion(question: string): string {
   let text = question.trim().replace(/\s+/g, ' ').replace(/[?.!\s]+$/, '')
   if (!text) return question
@@ -33,7 +51,17 @@ function summarizeQuestion(question: string): string {
   const summary = firstClause || text
   if (!summary) return question
 
-  return summary.charAt(0).toUpperCase() + summary.slice(1)
+  const words = summary.split(/\s+/).filter(Boolean)
+  while (words.length > 0 && summaryPrefixSkipWords.has(words[0].toLowerCase())) {
+    words.shift()
+  }
+
+  const filteredWords = words.filter((word) => !summaryDropWords.has(word.toLowerCase()))
+  const selected = (filteredWords.length > 0 ? filteredWords : words).slice(0, maxSummaryWords)
+  const pithy = selected.join(' ').trim()
+  if (!pithy) return question
+
+  return pithy.charAt(0).toUpperCase() + pithy.slice(1)
 }
 
 export function Room({ thankYouUrl }: RoomProps) {
