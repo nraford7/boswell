@@ -15,8 +15,21 @@ from boswell.server.database import get_session
 from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
 from boswell.server.models import Team, User
+from passlib.context import CryptContext
 
 router = APIRouter()
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return _pwd_context.hash(password)
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify a password against its bcrypt hash."""
+    return _pwd_context.verify(password, password_hash)
 
 
 # -----------------------------------------------------------------------------
@@ -129,16 +142,45 @@ async def login_page(request: Request):
 async def login_submit(
     request: Request,
     email: str = Form(...),
+    password: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
-    """Handle login form submission.
+    """Handle login — password auth or magic link fallback."""
+    normalized_email = email.strip().lower()
 
-    Creates a magic link and displays it. In production, this would send an email.
-    """
+    # Look up user
+    result = await db.execute(select(User).where(User.email == normalized_email))
+    user = result.scalar_one_or_none()
+
+    # Password login path
+    if password:
+        if not user or not user.password_hash:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/login.html",
+                context={"message": "Invalid email or password."},
+            )
+        if not verify_password(password, user.password_hash):
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/login.html",
+                context={"message": "Invalid email or password."},
+            )
+        # Success — create session
+        session_token = create_session_token(user.id)
+        response = RedirectResponse(url="/admin/", status_code=303)
+        response.set_cookie(
+            key="session",
+            value=session_token,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="lax",
+            max_age=604800,
+        )
+        return response
+
+    # Magic link fallback (existing behavior for users without passwords)
     settings = get_settings()
-    normalized_email = email.lower()
-
-    # Check if email is in admin_emails list (case-insensitive)
     admin_emails_lower = [e.lower() for e in settings.admin_emails] if settings.admin_emails else []
     if admin_emails_lower and normalized_email not in admin_emails_lower:
         return templates.TemplateResponse(
@@ -147,27 +189,17 @@ async def login_submit(
             context={"message": "Email not authorized."},
         )
 
-    # Check if user exists, create if not
-    result = await db.execute(select(User).where(User.email == normalized_email))
-    user = result.scalar_one_or_none()
-
     if not user:
-        # Create a new team for this user
         team = Team(name=f"{normalized_email}'s Team")
         db.add(team)
-        await db.flush()  # Get the team ID
-
-        # Create the user with name from email username
+        await db.flush()
         name = normalized_email.split("@")[0]
         user = User(team_id=team.id, email=normalized_email, name=name)
         db.add(user)
         await db.flush()
 
-    # Generate login token and link
     token = create_login_token(normalized_email)
     login_link = f"{settings.base_url}/admin/verify?token={token}"
-
-    # Send magic link via email
     email_sent = await send_admin_login_email(to=normalized_email, login_link=login_link)
 
     if email_sent:
@@ -177,7 +209,6 @@ async def login_submit(
             context={"message": "Check your email for a login link."},
         )
     else:
-        # Fallback: display link if email fails
         return templates.TemplateResponse(
             request=request,
             name="admin/login.html",
