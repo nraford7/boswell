@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Accept Invitation - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 2rem;
+    }
+
+    .login-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 3rem;
+        width: 100%;
+        max-width: 460px;
+        position: relative;
+        animation: fadeIn 0.5s ease forwards;
+    }
+
+    .login-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    .login-brand {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 400;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        color: var(--fg);
+    }
+
+    .login-tagline {
+        text-align: center;
+        color: var(--fg-dim);
+        font-size: 0.9375rem;
+        margin-bottom: 2.5rem;
+    }
+
+    .invite-info {
+        background: var(--accent-subtle);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-md);
+        padding: 1rem 1.25rem;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .invite-info p {
+        color: var(--accent);
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .invite-info strong {
+        color: var(--fg);
+        font-weight: 600;
+    }
+
+    .login-form .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .login-form input {
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+        background-color: var(--bg-surface);
+        border: 1px solid var(--border);
+    }
+
+    .login-form .btn {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 0.9375rem;
+        font-weight: 500;
+    }
+
+    .login-message {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+
+    .login-message.error {
+        background-color: var(--error-bg);
+        color: var(--error);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .login-footer {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="login-container">
+    <div class="login-card">
+        <h1 class="login-brand">Accept Invitation</h1>
+        <p class="login-tagline">Join Boswell</p>
+
+        {% if project_name %}
+        <div class="invite-info">
+            <p>You've been invited to collaborate on <strong>{{ project_name }}</strong></p>
+        </div>
+        {% endif %}
+
+        {% if message %}
+        <div class="login-message error">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="login-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" value="{{ email }}" readonly disabled>
+            </div>
+
+            {% if not existing_user %}
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" placeholder="Your full name" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="At least 8 characters" required autocomplete="new-password">
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password" autofocus>
+            </div>
+            {% endif %}
+
+            <button type="submit" class="btn">
+                {% if existing_user %}Verify & Accept{% else %}Create Account & Accept{% endif %}
+            </button>
+        </form>
+
+        <div class="login-footer">
+            {% if existing_user %}
+            Sign in to accept this invitation
+            {% else %}
+            Create your account to get started
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

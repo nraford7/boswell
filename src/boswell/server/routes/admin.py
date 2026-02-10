@@ -129,7 +129,8 @@ async def dashboard(
         name="admin/dashboard.html",
         context={
             "user": user,
-            "projects": projects,
+            "owned_projects": owned_projects,
+            "shared_projects": shared_projects,
             "counts_by_project": counts_by_project,
         },
     )
@@ -2136,4 +2137,256 @@ async def download_all_transcripts(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"'
         },
+    )
+
+
+# -----------------------------------------------------------------------------
+# Project Sharing Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/sharing")
+async def project_sharing(
+    request: Request,
+    project_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """View project sharing settings (owner only)."""
+    await check_project_access(user.id, project_id, ProjectRole.owner, db)
+
+    result = await db.execute(
+        select(Project).where(Project.id == project_id)
+    )
+    project = result.scalar_one_or_none()
+
+    # Get collaborators
+    shares_result = await db.execute(
+        select(ProjectShare)
+        .options(selectinload(ProjectShare.user))
+        .where(ProjectShare.project_id == project_id)
+        .order_by(ProjectShare.created_at)
+    )
+    shares = shares_result.scalars().all()
+
+    # Get pending invites
+    from boswell.server.models import AccountInvite
+    invites_result = await db.execute(
+        select(AccountInvite)
+        .where(AccountInvite.project_id == project_id)
+        .where(AccountInvite.claimed_at.is_(None))
+        .where(AccountInvite.revoked_at.is_(None))
+        .order_by(AccountInvite.created_at.desc())
+    )
+    pending_invites = invites_result.scalars().all()
+
+    invite_link = request.query_params.get("invite_link")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_share.html",
+        context={
+            "user": user,
+            "project": project,
+            "shares": shares,
+            "pending_invites": pending_invites,
+            "roles": [r.value for r in ProjectRole],
+            "invite_link": invite_link,
+        },
+    )
+
+
+@router.post("/projects/{project_id}/sharing")
+async def share_project(
+    request: Request,
+    project_id: UUID,
+    email: str = Form(...),
+    role: str = Form("view"),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Share a project with a user by email."""
+    from datetime import timedelta
+    from boswell.server.models import AccountInvite, _hash_token
+
+    await check_project_access(user.id, project_id, ProjectRole.owner, db)
+
+    normalized_email = email.strip().lower()
+    share_role = ProjectRole(role)
+
+    # Check if user exists
+    target_result = await db.execute(
+        select(User).where(User.email == normalized_email)
+    )
+    target_user = target_result.scalar_one_or_none()
+
+    invite_link = None
+
+    if target_user:
+        # Direct share — upsert
+        existing = await db.execute(
+            select(ProjectShare)
+            .where(ProjectShare.project_id == project_id)
+            .where(ProjectShare.user_id == target_user.id)
+        )
+        share = existing.scalar_one_or_none()
+        if share:
+            share.role = share_role
+            share.updated_at = datetime.now(timezone.utc)
+        else:
+            db.add(ProjectShare(
+                project_id=project_id,
+                user_id=target_user.id,
+                role=share_role,
+                granted_by=user.id,
+            ))
+    else:
+        # Create invite
+        raw_token = secrets.token_urlsafe(48)
+        settings = get_settings()
+
+        db.add(AccountInvite(
+            token_hash=_hash_token(raw_token),
+            token_prefix=raw_token[:12],
+            email=normalized_email,
+            invited_by=user.id,
+            project_id=project_id,
+            role=share_role,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        ))
+
+        invite_link = f"{settings.base_url}/admin/invite/{raw_token}"
+
+    await db.commit()
+
+    redirect_url = f"/admin/projects/{project_id}/sharing"
+    if invite_link:
+        import urllib.parse
+        redirect_url += f"?invite_link={urllib.parse.quote(invite_link)}"
+
+    return RedirectResponse(url=redirect_url, status_code=303)
+
+
+@router.post("/projects/{project_id}/sharing/{share_id}/update")
+async def update_share(
+    request: Request,
+    project_id: UUID,
+    share_id: UUID,
+    role: str = Form(...),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Change a collaborator's role."""
+    from boswell.server.authorization import assert_not_last_owner
+
+    await check_project_access(user.id, project_id, ProjectRole.owner, db)
+
+    result = await db.execute(
+        select(ProjectShare)
+        .where(ProjectShare.id == share_id)
+        .where(ProjectShare.project_id == project_id)
+    )
+    share = result.scalar_one_or_none()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    new_role = ProjectRole(role)
+
+    # If downgrading from owner, check last-owner invariant
+    if share.role == ProjectRole.owner and new_role != ProjectRole.owner:
+        await assert_not_last_owner(project_id, share.user_id, db)
+
+    share.role = new_role
+    share.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return RedirectResponse(url=f"/admin/projects/{project_id}/sharing", status_code=303)
+
+
+@router.post("/projects/{project_id}/sharing/{share_id}/revoke")
+async def revoke_share(
+    request: Request,
+    project_id: UUID,
+    share_id: UUID,
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Revoke a collaborator's access."""
+    from boswell.server.authorization import assert_not_last_owner
+
+    await check_project_access(user.id, project_id, ProjectRole.owner, db)
+
+    result = await db.execute(
+        select(ProjectShare)
+        .where(ProjectShare.id == share_id)
+        .where(ProjectShare.project_id == project_id)
+    )
+    share = result.scalar_one_or_none()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    # Can't revoke last owner
+    if share.role == ProjectRole.owner:
+        await assert_not_last_owner(project_id, share.user_id, db)
+
+    await db.delete(share)
+    await db.commit()
+
+    return RedirectResponse(url=f"/admin/projects/{project_id}/sharing", status_code=303)
+
+
+# -----------------------------------------------------------------------------
+# Account Settings Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/settings")
+async def account_settings(
+    request: Request,
+    user: User = Depends(require_auth),
+):
+    """Account settings page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/account_settings.html",
+        context={"user": user, "message": None},
+    )
+
+
+@router.post("/settings")
+async def update_account(
+    request: Request,
+    name: str = Form(...),
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+):
+    """Update account name and/or password."""
+    from boswell.server.routes.auth import hash_password, verify_password
+
+    user.name = name.strip()
+
+    if new_password:
+        if not current_password or not user.password_hash or not verify_password(current_password, user.password_hash):
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/account_settings.html",
+                context={"user": user, "message": "Current password is incorrect."},
+            )
+        if len(new_password) < 8:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/account_settings.html",
+                context={"user": user, "message": "New password must be at least 8 characters."},
+            )
+        user.password_hash = hash_password(new_password)
+
+    await db.commit()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/account_settings.html",
+        context={"user": user, "message": "Settings updated."},
     )

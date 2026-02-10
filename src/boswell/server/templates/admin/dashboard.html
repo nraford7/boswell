@@ -174,7 +174,7 @@
 
 <div class="container">
     <div class="page-header">
-        <h1 class="page-title">Your <span>Projects</span></h1>
+        <h1 class="page-title">My <span>Projects</span></h1>
         <a href="/admin/projects/new" class="btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
@@ -183,9 +183,9 @@
         </a>
     </div>
 
-    {% if projects %}
+    {% if owned_projects %}
     <div class="projects-grid">
-        {% for project in projects %}
+        {% for project in owned_projects %}
         {% set counts = counts_by_project.get(project.id) %}
         {% set total_interviews = counts.total if counts else 0 %}
         {% set completed = counts.completed if counts else 0 %}
@@ -223,6 +223,44 @@
         <h3>No projects yet</h3>
         <p>Projects help you organize interviews around a specific topic or research question.</p>
         <a href="/admin/projects/new" class="btn">Create Your First Project</a>
+    </div>
+    {% endif %}
+
+    {% if shared_projects %}
+    <div class="page-header" style="margin-top: 3rem;">
+        <h2 class="page-title">Shared <span>With Me</span></h2>
+    </div>
+
+    <div class="projects-grid">
+        {% for project in shared_projects %}
+        {% set counts = counts_by_project.get(project.id) %}
+        {% set total_interviews = counts.total if counts else 0 %}
+        {% set completed = counts.completed if counts else 0 %}
+        {% set pending = total_interviews - completed %}
+        <a href="/admin/projects/{{ project.id }}" class="project-card">
+            <div class="project-topic">{{ project.name or project.topic }}</div>
+            <div class="project-meta">
+                {% if project.name %}
+                <span style="color: var(--fg-muted);">{{ project.topic[:60] }}{% if project.topic|length > 60 %}...{% endif %}</span> &middot;
+                {% endif %}
+                {{ project.target_minutes }} min &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
+            </div>
+            <div class="project-stats">
+                <div class="project-stat">
+                    <span class="stat-value">{{ total_interviews }}</span>
+                    <span class="stat-label">Interviews</span>
+                </div>
+                <div class="project-stat">
+                    <span class="stat-value completed">{{ completed }}</span>
+                    <span class="stat-label">Completed</span>
+                </div>
+                <div class="project-stat">
+                    <span class="stat-value pending">{{ pending }}</span>
+                    <span class="stat-label">Pending</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
     </div>
     {% endif %}
 </div>

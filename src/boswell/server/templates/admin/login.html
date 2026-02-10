@@ -73,17 +73,17 @@
         margin-bottom: 1.5rem;
     }
 
-    .login-form input[type="email"] {
+    .login-form input[type="email"],
+    .login-form input[type="password"] {
         padding: 1rem 1.25rem;
         font-size: 1rem;
         background-color: var(--bg-surface);
         border: 1px solid var(--border);
-        text-align: center;
     }
 
-    .login-form input[type="email"]::placeholder {
+    .login-form input[type="email"]::placeholder,
+    .login-form input[type="password"]::placeholder {
         color: var(--fg-dim);
-        text-align: center;
     }
 
     .login-form .btn {
@@ -168,11 +168,14 @@
             <div class="form-group">
                 <input type="email" name="email" placeholder="Enter your email" required autocomplete="email" autofocus>
             </div>
-            <button type="submit" class="btn">Send Login Link</button>
+            <div class="form-group">
+                <input type="password" name="password" placeholder="Password (or leave blank for magic link)" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn">Login</button>
         </form>
 
         <div class="login-footer">
-            Secure, passwordless authentication
+            Enter password or leave blank for magic link
         </div>
     </div>
 </div>
