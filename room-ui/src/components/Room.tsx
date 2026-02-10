@@ -164,10 +164,7 @@ export function Room({ thankYouUrl }: RoomProps) {
         </div>
       )}
       {currentQuestion && (
-        <div className="current-question">
-          <div className="current-question-label">Current question</div>
-          <div className="current-question-summary">{currentQuestion.summary}</div>
-        </div>
+        <div className="current-question">{currentQuestion.summary}</div>
       )}
       <Controls />
     </div>

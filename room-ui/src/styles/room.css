@@ -452,85 +452,52 @@
 /* Current Question Display */
 .current-question {
   position: absolute;
-  bottom: 128px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  width: min(1100px, 88vw);
-  max-width: 88vw;
-  min-height: 172px;
-  padding: 22px 26px;
-  background: rgba(0, 0, 0, 0.56);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-lg);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  animation: question-fade-in 0.25s ease-out;
-  z-index: 7;
-}
-
-.current-question-label {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-.current-question-summary {
-  color: rgba(255, 255, 255, 0.92);
+  transform: translate(-50%, -50%);
+  width: min(86vw, 1200px);
+  max-width: 86vw;
+  color: var(--accent);
   font-family: var(--font-display);
-  font-size: 1.58rem;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
+  font-size: clamp(2.2rem, 5.6vw, 4.8rem);
+  line-height: 1.08;
   text-align: center;
+  text-shadow: 0 0 42px var(--accent-glow);
   white-space: normal;
   word-break: normal;
   overflow-wrap: anywhere;
+  pointer-events: none;
+  animation: question-fade-in 0.25s ease-out;
+  z-index: 6;
 }
 
 @media (max-width: 900px) {
   .current-question {
-    width: min(92vw, 760px);
-    max-width: 92vw;
+    width: min(90vw, 760px);
+    max-width: 90vw;
   }
 }
 
 @media (max-width: 600px) {
   .current-question {
-    max-width: 92%;
-    bottom: 94px;
-    min-height: 146px;
-    padding: 16px 16px;
-  }
-
-  .current-question-summary {
-    font-size: 1.2rem;
+    font-size: clamp(1.9rem, 9vw, 3.2rem);
+    line-height: 1.1;
   }
 }
 
 @media (max-height: 500px) {
   .current-question {
-    bottom: 70px;
-    min-height: 118px;
-    padding: 12px 14px;
-  }
-
-  .current-question-summary {
-    font-size: 1.06rem;
+    font-size: clamp(1.5rem, 5vh, 2.4rem);
   }
 }
 
 @keyframes question-fade-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translate(-50%, -50%) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
