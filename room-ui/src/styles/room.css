@@ -455,49 +455,56 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(86vw, 1200px);
-  max-width: 86vw;
+  width: min(92vw, 1320px);
+  max-width: 92vw;
   color: var(--accent);
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 5.6vw, 4.8rem);
-  line-height: 1.08;
+  font-size: clamp(1.5rem, 3.6vw, 2.8rem);
+  line-height: 1.2;
   text-align: center;
-  text-shadow: 0 0 42px var(--accent-glow);
+  text-shadow: 0 0 26px var(--accent-glow);
   white-space: normal;
   word-break: normal;
   overflow-wrap: anywhere;
   pointer-events: none;
-  animation: question-fade-in 0.25s ease-out;
   z-index: 6;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.current-question-visible {
+  opacity: 0.95;
+}
+
+.current-question-hidden {
+  opacity: 0;
+}
+
+.current-question-medium {
+  font-size: clamp(1.35rem, 3.1vw, 2.4rem);
+}
+
+.current-question-long {
+  font-size: clamp(1.2rem, 2.6vw, 2rem);
+  line-height: 1.25;
 }
 
 @media (max-width: 900px) {
   .current-question {
-    width: min(90vw, 760px);
-    max-width: 90vw;
+    width: min(94vw, 760px);
+    max-width: 94vw;
   }
 }
 
 @media (max-width: 600px) {
   .current-question {
-    font-size: clamp(1.9rem, 9vw, 3.2rem);
-    line-height: 1.1;
+    font-size: clamp(1.2rem, 4.9vw, 1.7rem);
+    line-height: 1.22;
   }
 }
 
 @media (max-height: 500px) {
   .current-question {
-    font-size: clamp(1.5rem, 5vh, 2.4rem);
-  }
-}
-
-@keyframes question-fade-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    font-size: clamp(1.05rem, 3.8vh, 1.5rem);
   }
 }

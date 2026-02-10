@@ -132,21 +132,19 @@ class DisplayTextProcessor(FrameProcessor):
         super().__init__(**kwargs)
         self._transport = transport
         self._current_text = ""
-        self._last_sent_question = ""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
-        """Process frames, streaming question updates to frontend."""
+        """Process frames and send question updates at response boundaries."""
         await super().process_frame(frame, direction)
 
         if isinstance(frame, TextFrame) and frame.text:
             self._current_text += frame.text
-            await self._maybe_send_latest_question()
 
         elif isinstance(frame, LLMFullResponseEndFrame):
-            # Final fallback check at response boundary.
-            await self._maybe_send_latest_question()
+            question = self._extract_question(self._current_text)
+            if question:
+                await self._send_question(question)
             self._current_text = ""
-            self._last_sent_question = ""
 
         await self.push_frame(frame, direction)
 
@@ -210,21 +208,22 @@ class DisplayTextProcessor(FrameProcessor):
 
         return pithy[0].upper() + pithy[1:] if pithy else question.strip()
 
-    async def _maybe_send_latest_question(self) -> None:
-        """Detect and send new question text if it changed."""
-        question = self._extract_question(self._current_text)
-        if not question or question == self._last_sent_question:
-            return
-
-        await self._send_question(question)
-        self._last_sent_question = question
+    def _normalize_question_sentence(self, question: str) -> str:
+        """Normalize text to a single question sentence ending in '?'."""
+        text = re.sub(r"\s+", " ", question).strip()
+        text = LEADING_FILLER_PATTERN.sub("", text).strip()
+        text = text.rstrip(" .!?\n\r\t")
+        if not text:
+            return question.strip()
+        return f"{text}?"
 
     async def _send_question(self, question: str) -> None:
         """Send question to frontend through transport message frames."""
+        normalized_question = self._normalize_question_sentence(question)
         payload = {
             "type": "display-question",
-            "question": question,
-            "summary": self._summarize_question(question),
+            "question": normalized_question,
+            "summary": self._summarize_question(normalized_question),
         }
 
         try:

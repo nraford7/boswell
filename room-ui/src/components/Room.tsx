@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDaily, useMeetingState, DailyAudio } from '@daily-co/daily-react'
 import { LoadingScreen } from './LoadingScreen'
 import { BoswellBranding } from './BoswellBranding'
@@ -11,57 +11,13 @@ interface RoomProps {
 type CountdownState = '3' | '2' | '1' | 'dots' | 'fading' | 'done'
 
 interface DisplayQuestion {
-  summary: string
+  text: string
 }
 
-const summaryLeadPatterns = [
-  /^(?:can|could|would|will|do|does|did|is|are|was|were|have|has|had)\s+you\s+/i,
-  /^(?:please\s+)?(?:tell|walk|talk|take|describe|share|explain)\s+me(?:\s+through)?\s+/i,
-  /^help\s+me\s+understand\s+/i,
-]
-
-const summaryPrefixSkipWords = new Set([
-  'who', 'what', 'when', 'where', 'why', 'how', 'which',
-  'can', 'could', 'would', 'will', 'do', 'does', 'did',
-  'is', 'are', 'was', 'were', 'have', 'has', 'had',
-  'tell', 'walk', 'talk', 'take', 'describe', 'share', 'explain',
-  'please', 'me', 'through', 'about',
-])
-
-const summaryDropWords = new Set([
-  'i', 'you', 'your', 'we', 'our', 'me', 'my',
-  'the', 'a', 'an',
-  'is', 'are', 'was', 'were', 'do', 'does', 'did',
-  'can', 'could', 'would', 'will', 'have', 'has', 'had',
-  'to', 'this', 'that', 'these', 'those',
-])
-
-const maxSummaryWords = 5
-
-function summarizeQuestion(question: string): string {
-  let text = question.trim().replace(/\s+/g, ' ').replace(/[?.!\s]+$/, '')
-  if (!text) return question
-
-  text = text.replace(/^(?:and|so|okay|ok|alright|great|thanks|thank you)[,\s]+/i, '').trim()
-  for (const pattern of summaryLeadPatterns) {
-    text = text.replace(pattern, '').trim()
-  }
-
-  const firstClause = text.split(/(?:,|;|\sand\s|\sor\s|\sbecause\s|\sso that\s)/i, 1)[0]?.trim()
-  const summary = firstClause || text
-  if (!summary) return question
-
-  const words = summary.split(/\s+/).filter(Boolean)
-  while (words.length > 0 && summaryPrefixSkipWords.has(words[0].toLowerCase())) {
-    words.shift()
-  }
-
-  const filteredWords = words.filter((word) => !summaryDropWords.has(word.toLowerCase()))
-  const selected = (filteredWords.length > 0 ? filteredWords : words).slice(0, maxSummaryWords)
-  const pithy = selected.join(' ').trim()
-  if (!pithy) return question
-
-  return pithy.charAt(0).toUpperCase() + pithy.slice(1)
+function normalizeQuestionSentence(text: string): string {
+  const cleaned = text.trim().replace(/\s+/g, ' ').replace(/[.!\s]+$/, '')
+  if (!cleaned) return ''
+  return cleaned.endsWith('?') ? cleaned : `${cleaned}?`
 }
 
 export function Room({ thankYouUrl }: RoomProps) {
@@ -69,6 +25,9 @@ export function Room({ thankYouUrl }: RoomProps) {
   const meetingState = useMeetingState()
   const [countdown, setCountdown] = useState<CountdownState>('3')
   const [currentQuestion, setCurrentQuestion] = useState<DisplayQuestion | null>(null)
+  const [questionVisible, setQuestionVisible] = useState(false)
+  const questionChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentQuestionRef = useRef<string | null>(null)
 
   // Countdown sequence: 3 -> 2 -> 1 -> ... -> fade -> done
   // Total time: ~5 seconds to sync with server-side TTS delay
@@ -91,9 +50,43 @@ export function Room({ thankYouUrl }: RoomProps) {
     return () => timers.forEach(clearTimeout)
   }, [meetingState])
 
+  useEffect(() => {
+    return () => {
+      if (questionChangeTimer.current) {
+        clearTimeout(questionChangeTimer.current)
+      }
+    }
+  }, [])
+
   // Listen for question updates from Boswell
   useEffect(() => {
     if (!daily) return
+
+    const transitionToQuestion = (nextQuestion: string) => {
+      if (nextQuestion === currentQuestionRef.current) return
+
+      if (questionChangeTimer.current) {
+        clearTimeout(questionChangeTimer.current)
+        questionChangeTimer.current = null
+      }
+
+      if (!currentQuestionRef.current) {
+        currentQuestionRef.current = nextQuestion
+        setCurrentQuestion({ text: nextQuestion })
+        setQuestionVisible(false)
+        // Ensure CSS transition runs after mount.
+        requestAnimationFrame(() => setQuestionVisible(true))
+        return
+      }
+
+      setQuestionVisible(false)
+      questionChangeTimer.current = setTimeout(() => {
+        currentQuestionRef.current = nextQuestion
+        setCurrentQuestion({ text: nextQuestion })
+        setQuestionVisible(true)
+        questionChangeTimer.current = null
+      }, 200)
+    }
 
     const handleAppMessage = (event: any) => {
       const payload = event?.data
@@ -101,14 +94,15 @@ export function Room({ thankYouUrl }: RoomProps) {
 
       if (payload.type && payload.type !== 'display-question') return
 
-      const question = typeof payload.question === 'string' ? payload.question.trim() : ''
-      if (!question) return
+      const rawQuestion = typeof payload.question === 'string'
+        ? payload.question
+        : typeof payload.summary === 'string'
+          ? payload.summary
+          : ''
+      const normalizedQuestion = normalizeQuestionSentence(rawQuestion)
+      if (!normalizedQuestion) return
 
-      const summary = typeof payload.summary === 'string' && payload.summary.trim()
-        ? payload.summary.trim()
-        : summarizeQuestion(question)
-
-      setCurrentQuestion({ summary })
+      transitionToQuestion(normalizedQuestion)
     }
 
     daily.on('app-message', handleAppMessage)
@@ -164,7 +158,19 @@ export function Room({ thankYouUrl }: RoomProps) {
         </div>
       )}
       {currentQuestion && (
-        <div className="current-question">{currentQuestion.summary}</div>
+        <div
+          className={`current-question ${
+            questionVisible ? 'current-question-visible' : 'current-question-hidden'
+          } ${
+            currentQuestion.text.length > 140
+              ? 'current-question-long'
+              : currentQuestion.text.length > 100
+                ? 'current-question-medium'
+                : ''
+          }`}
+        >
+          {currentQuestion.text}
+        </div>
       )}
       <Controls />
     </div>
