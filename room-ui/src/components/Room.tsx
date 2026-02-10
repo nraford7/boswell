@@ -10,11 +10,28 @@ interface RoomProps {
 
 type CountdownState = '3' | '2' | '1' | 'dots' | 'fading' | 'done'
 
+interface DisplayQuestion {
+  full: string
+  summary: string
+}
+
+function summarizeQuestion(question: string, maxWords = 14): string {
+  const cleaned = question.trim().replace(/\s+/g, ' ').replace(/[?.!\s]+$/, '')
+  if (!cleaned) return question
+
+  const words = cleaned.split(' ')
+  if (words.length <= maxWords) {
+    return cleaned
+  }
+
+  return `${words.slice(0, maxWords).join(' ').replace(/[,:;]+$/, '')}...`
+}
+
 export function Room({ thankYouUrl }: RoomProps) {
   const daily = useDaily()
   const meetingState = useMeetingState()
   const [countdown, setCountdown] = useState<CountdownState>('3')
-  const [currentQuestion, setCurrentQuestion] = useState<string | null>(null)
+  const [currentQuestion, setCurrentQuestion] = useState<DisplayQuestion | null>(null)
 
   // Countdown sequence: 3 -> 2 -> 1 -> ... -> fade -> done
   // Total time: ~5 seconds to sync with server-side TTS delay
@@ -42,15 +59,19 @@ export function Room({ thankYouUrl }: RoomProps) {
     if (!daily) return
 
     const handleAppMessage = (event: any) => {
-      // Accept both typed messages and legacy format without type field
-      const d = event.data
-      if (d?.type && d.type !== 'display-question') return
-      const q = d?.question
-      if (typeof q === 'string' && q.trim()) {
-        setCurrentQuestion(q)
-      } else if (q !== undefined) {
-        setCurrentQuestion(null)
-      }
+      const payload = event?.data
+      if (!payload || typeof payload !== 'object') return
+
+      if (payload.type && payload.type !== 'display-question') return
+
+      const question = typeof payload.question === 'string' ? payload.question.trim() : ''
+      if (!question) return
+
+      const summary = typeof payload.summary === 'string' && payload.summary.trim()
+        ? payload.summary.trim()
+        : summarizeQuestion(question)
+
+      setCurrentQuestion({ full: question, summary })
     }
 
     daily.on('app-message', handleAppMessage)
@@ -105,9 +126,10 @@ export function Room({ thankYouUrl }: RoomProps) {
           </span>
         </div>
       )}
-      {currentQuestion && countdown === 'done' && (
-        <div className="current-question">
-          {currentQuestion}
+      {currentQuestion && (
+        <div className="current-question" title={currentQuestion.full}>
+          <div className="current-question-label">Current question</div>
+          <div className="current-question-summary">{currentQuestion.summary}</div>
         </div>
       )}
       <Controls />
