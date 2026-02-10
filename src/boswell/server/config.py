@@ -39,7 +39,6 @@ class Settings:
     # App config
     secret_key: str
     base_url: str
-    admin_emails: list[str] = field(default_factory=list)
 
     # Defaults
     session_expire_days: int = 7
@@ -61,14 +60,10 @@ class Settings:
 
         Optional variables:
             BASE_URL: Base URL for the application (default: http://localhost:8000)
-            ADMIN_EMAILS: Comma-separated list of admin email addresses
 
         Raises:
             ConfigurationError: If any required variable is missing.
         """
-        admin_emails_str = os.environ.get("ADMIN_EMAILS", "")
-        admin_emails = [e.strip() for e in admin_emails_str.split(",") if e.strip()]
-
         # SECRET_KEY has a dev default but should be set in production
         secret_key = os.environ.get("SECRET_KEY", "")
         if not secret_key:
@@ -92,7 +87,6 @@ class Settings:
             sender_email=os.environ.get("SENDER_EMAIL", "Boswell <boswell@emirintelligence.com>"),
             secret_key=secret_key,
             base_url=os.environ.get("BASE_URL", "http://localhost:8000"),
-            admin_emails=admin_emails,
             debug=debug,
         )
 

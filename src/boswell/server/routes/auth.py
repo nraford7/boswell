@@ -15,7 +15,7 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
-from boswell.server.models import Team, User, AccountInvite, ProjectShare, ProjectRole, _hash_token
+from boswell.server.models import User, AccountInvite, ProjectShare, ProjectRole, _hash_token
 from passlib.context import CryptContext
 
 router = APIRouter()
@@ -180,25 +180,15 @@ async def login_submit(
         )
         return response
 
-    # Magic link fallback (existing behavior for users without passwords)
-    settings = get_settings()
-    admin_emails_lower = [e.lower() for e in settings.admin_emails] if settings.admin_emails else []
-    if admin_emails_lower and normalized_email not in admin_emails_lower:
+    # Magic link fallback (for existing passwordless users only)
+    if not user:
         return templates.TemplateResponse(
             request=request,
             name="admin/login.html",
-            context={"message": "Email not authorized."},
+            context={"message": "Account not found. You need an invite link to create an account."},
         )
 
-    if not user:
-        team = Team(name=f"{normalized_email}'s Team")
-        db.add(team)
-        await db.flush()
-        name = normalized_email.split("@")[0]
-        user = User(team_id=team.id, email=normalized_email, name=name)
-        db.add(user)
-        await db.flush()
-
+    settings = get_settings()
     token = create_login_token(normalized_email)
     login_link = f"{settings.base_url}/admin/verify?token={token}"
     email_sent = await send_admin_login_email(to=normalized_email, login_link=login_link)
