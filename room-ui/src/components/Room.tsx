@@ -27,6 +27,7 @@ export function Room({ thankYouUrl }: RoomProps) {
   const [currentQuestion, setCurrentQuestion] = useState<DisplayQuestion | null>(null)
   const [questionVisible, setQuestionVisible] = useState(false)
   const questionChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rafIdRef = useRef<number | null>(null)
   const currentQuestionRef = useRef<string | null>(null)
 
   // Countdown sequence: 3 -> 2 -> 1 -> ... -> fade -> done
@@ -55,6 +56,9 @@ export function Room({ thankYouUrl }: RoomProps) {
       if (questionChangeTimer.current) {
         clearTimeout(questionChangeTimer.current)
       }
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
     }
   }, [])
 
@@ -63,19 +67,22 @@ export function Room({ thankYouUrl }: RoomProps) {
     if (!daily) return
 
     const transitionToQuestion = (nextQuestion: string) => {
-      if (nextQuestion === currentQuestionRef.current) return
-
       if (questionChangeTimer.current) {
         clearTimeout(questionChangeTimer.current)
         questionChangeTimer.current = null
       }
+
+      if (nextQuestion === currentQuestionRef.current) return
 
       if (!currentQuestionRef.current) {
         currentQuestionRef.current = nextQuestion
         setCurrentQuestion({ text: nextQuestion })
         setQuestionVisible(false)
         // Ensure CSS transition runs after mount.
-        requestAnimationFrame(() => setQuestionVisible(true))
+        rafIdRef.current = requestAnimationFrame(() => {
+          setQuestionVisible(true)
+          rafIdRef.current = null
+        })
         return
       }
 

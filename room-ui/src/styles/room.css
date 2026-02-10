@@ -506,5 +506,7 @@
 @media (max-height: 500px) {
   .current-question {
     font-size: clamp(1.05rem, 3.8vh, 1.5rem);
+    max-height: 60vh;
+    overflow: hidden;
   }
 }

@@ -42,7 +42,7 @@ SUMMARY_LEAD_PATTERNS = [
 ]
 
 SUMMARY_SPLIT_PATTERN = re.compile(
-    r"(?:,|;|\s+and\s+|\s+or\s+|\s+because\s+|\s+so that\s+)",
+    r"(?:,|;|\s+because\s+|\s+so that\s+)",
     re.IGNORECASE,
 )
 
