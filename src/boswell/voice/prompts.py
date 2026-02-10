@@ -6,15 +6,19 @@ MAX_RESEARCH_CHARS = 8000
 MAX_TRANSCRIPT_CHARS = 4000
 
 
+_TRUNCATION_SUFFIX = "\n[... truncated for context budget ...]"
+
+
 def _truncate_context(text: str, max_chars: int) -> str:
     """Truncate text to fit within character budget."""
     if not text or len(text) <= max_chars:
         return text or ""
-    truncated = text[:max_chars]
+    budget = max_chars - len(_TRUNCATION_SUFFIX)
+    truncated = text[:budget]
     last_period = truncated.rfind(".")
-    if last_period > max_chars * 0.7:
+    if last_period > budget * 0.7:
         truncated = truncated[:last_period + 1]
-    return truncated + "\n[... truncated for context budget ...]"
+    return truncated + _TRUNCATION_SUFFIX
 
 
 ANGLE_PROMPTS = {

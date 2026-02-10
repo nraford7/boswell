@@ -4,9 +4,7 @@ These tests require a running PostgreSQL database.
 Skip if DATABASE_URL is not set.
 """
 
-import asyncio
 import os
-from uuid import uuid4
 
 import pytest
 

@@ -1,17 +1,15 @@
 # src/boswell/server/main.py
 """FastAPI application for Boswell server."""
 
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
 from boswell.server.database import close_db
-
-logger = logging.getLogger(__name__)
 
 # Compute template directory relative to this file
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -32,7 +30,6 @@ app = FastAPI(
 )
 
 # Enable gzip compression for responses
-from starlette.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Templates

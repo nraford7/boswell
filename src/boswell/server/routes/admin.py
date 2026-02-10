@@ -277,12 +277,12 @@ async def project_detail(
     db: AsyncSession = Depends(get_session),
 ):
     """Project detail page showing project info and interview list."""
-    # Fetch project with interviews (no transcript/analysis eager loading)
+    # Fetch project with interviews and transcripts (needed by template)
     result = await db.execute(
         select(Project)
         .where(Project.id == project_id)
         .options(
-            selectinload(Project.interviews),
+            selectinload(Project.interviews).selectinload(Interview.transcript),
         )
     )
     project = result.scalar_one_or_none()

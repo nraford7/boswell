@@ -983,8 +983,8 @@ async function bulkRemind() {
             body: JSON.stringify({ interview_ids: Array.from(selectedIds) })
         });
         const data = await response.json();
-        if (data.sent > 0) {
-            showToast(`Sent reminders to ${data.sent} of ${data.total} selected`);
+        if (data.queued > 0) {
+            showToast(`Queued reminders for ${data.queued} of ${data.total} selected`);
         } else {
             showToast('No interviews eligible for reminders');
         }

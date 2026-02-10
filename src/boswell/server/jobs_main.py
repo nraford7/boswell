@@ -40,13 +40,27 @@ async def main() -> None:
 
     logger.info("Starting Boswell jobs worker")
 
-    # Run the worker until shutdown signal
+    # Run the worker until shutdown signal or unexpected exit
     worker_task = asyncio.create_task(run_worker())
 
-    # Wait for shutdown signal
-    await shutdown_event.wait()
+    # Wait for either shutdown signal or worker task completion
+    shutdown_waiter = asyncio.create_task(shutdown_event.wait())
+    done, _ = await asyncio.wait(
+        [worker_task, shutdown_waiter],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
 
-    # Graceful shutdown
+    if worker_task in done:
+        shutdown_waiter.cancel()
+        exc = worker_task.exception()
+        if exc:
+            logger.error(f"Jobs worker exited with error: {exc}")
+            sys.exit(1)
+        else:
+            logger.error("Jobs worker exited unexpectedly without error")
+            sys.exit(1)
+
+    # Graceful shutdown via signal
     logger.info("Initiating graceful shutdown...")
     worker_task.cancel()
 

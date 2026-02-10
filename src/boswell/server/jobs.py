@@ -383,7 +383,7 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
 
     Expected payload:
         - project_id: UUID of the project
-        - research_file_paths: List of {"path": str, "name": str} dicts
+        - research_file_data: List of {"name": str, "content_b64": str} dicts
         - research_urls: List of URL strings
         - topic: The project topic for question generation
 
@@ -396,7 +396,13 @@ async def handle_process_project_research(payload: dict, db: AsyncSession) -> No
     try:
         from boswell.ingestion import read_document, fetch_url, generate_questions
     except ImportError:
-        logger.warning("Ingestion module not available")
+        logger.warning("Ingestion module not available, marking project as failed")
+        project_id = UUID(payload["project_id"])
+        stmt = select(Project).where(Project.id == project_id)
+        result = await db.execute(stmt)
+        project = result.scalar_one_or_none()
+        if project:
+            project.processing_status = "failed"
         return
 
     project_id = UUID(payload["project_id"])

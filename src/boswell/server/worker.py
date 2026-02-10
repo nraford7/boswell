@@ -103,9 +103,9 @@ MAX_FAILURES = 4
 # Maximum concurrent interview tasks per worker
 MAX_CONCURRENT = int(os.environ.get("WORKER_MAX_CONCURRENT", "3"))
 
-# Stale claim timeout: if a claim is older than this, treat it as abandoned
-# (covers hard crashes where shutdown_voice_worker never runs)
-STALE_CLAIM_SECONDS = int(os.environ.get("WORKER_STALE_CLAIM_SECONDS", "1800"))  # 30 minutes
+# Stale claim timeout: if a claim is older than this, treat it as abandoned.
+# Must exceed max interview duration (120min) to avoid reclaiming active interviews.
+STALE_CLAIM_SECONDS = int(os.environ.get("WORKER_STALE_CLAIM_SECONDS", "9000"))  # 2.5 hours
 
 
 def _extract_questions_list(project: Project) -> list[str]:
@@ -518,7 +518,12 @@ async def run_interview_task(interview_id: UUID) -> None:
         try:
             async with get_session_context() as db:
                 result = await db.execute(
-                    select(Interview).where(Interview.id == interview_id)
+                    select(Interview).where(
+                        and_(
+                            Interview.id == interview_id,
+                            Interview.claimed_by == WORKER_ID,
+                        )
+                    )
                 )
                 interview = result.scalar_one_or_none()
                 if interview:

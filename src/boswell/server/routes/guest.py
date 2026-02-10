@@ -69,7 +69,6 @@ async def create_daily_room(interview_id: str, guest_name: str = "Guest") -> dic
                 raise RuntimeError(f"Failed to create Daily room: {error_text}")
 
         # Get room URL (create response or fetch existing)
-        settings = get_settings()
         room_url = f"https://{settings.daily_domain}.daily.co/{room_name}"
 
         # Create a meeting token for the guest
