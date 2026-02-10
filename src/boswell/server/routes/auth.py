@@ -16,26 +16,22 @@ from boswell.server.database import get_session
 from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
 from boswell.server.models import User, AccountInvite, ProjectShare, ProjectRole, _hash_token
-from passlib.context import CryptContext
+
+import bcrypt
 
 router = APIRouter()
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def _truncate_for_bcrypt(password: str) -> str:
-    """Truncate password to 72 bytes (bcrypt's maximum)."""
-    return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
 
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
-    return _pwd_context.hash(_truncate_for_bcrypt(password))
+    pw = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """Verify a password against its bcrypt hash."""
-    return _pwd_context.verify(_truncate_for_bcrypt(password), password_hash)
+    pw = password.encode("utf-8")[:72]
+    return bcrypt.checkpw(pw, password_hash.encode("utf-8"))
 
 
 # -----------------------------------------------------------------------------
