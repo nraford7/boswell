@@ -29,6 +29,23 @@ LEADING_FILLER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+SUMMARY_LEAD_PATTERNS = [
+    re.compile(
+        r"^(?:can|could|would|will|do|does|did|is|are|was|were|have|has|had)\s+you\s+",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:please\s+)?(?:tell|walk|talk|take|describe|share|explain)\s+me(?:\s+through)?\s+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^help\s+me\s+understand\s+", re.IGNORECASE),
+]
+
+SUMMARY_SPLIT_PATTERN = re.compile(
+    r"(?:,|;|\s+and\s+|\s+or\s+|\s+because\s+|\s+so that\s+)",
+    re.IGNORECASE,
+)
+
 
 class DisplayTextProcessor(FrameProcessor):
     """Extracts questions from LLM responses and sends them to frontend.
@@ -89,8 +106,8 @@ class DisplayTextProcessor(FrameProcessor):
 
         return None
 
-    def _summarize_question(self, question: str, max_words: int = 14) -> str:
-        """Create a concise, readable summary for on-screen display."""
+    def _summarize_question(self, question: str) -> str:
+        """Create a high-level, readable summary for on-screen display."""
         text = re.sub(r"\s+", " ", question).strip()
         text = LEADING_FILLER_PATTERN.sub("", text).strip()
         text = text.rstrip("?!. ")
@@ -98,11 +115,16 @@ class DisplayTextProcessor(FrameProcessor):
         if not text:
             return question.strip()
 
-        words = text.split(" ")
-        if len(words) <= max_words:
-            return text
+        for pattern in SUMMARY_LEAD_PATTERNS:
+            text = pattern.sub("", text).strip()
 
-        return " ".join(words[:max_words]).rstrip(",;:") + "..."
+        # Keep the first high-level clause and drop trailing detail.
+        parts = SUMMARY_SPLIT_PATTERN.split(text, maxsplit=1)
+        summary = parts[0].strip(" ,;")
+        if not summary:
+            summary = text
+
+        return summary[0].upper() + summary[1:] if summary else question.strip()
 
     async def _maybe_send_latest_question(self) -> None:
         """Detect and send new question text if it changed."""

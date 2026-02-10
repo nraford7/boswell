@@ -60,12 +60,11 @@ class TestSummarizeQuestion:
         summary = self.processor._summarize_question("What problem are you trying to solve?")
         assert summary == "What problem are you trying to solve"
 
-    def test_truncates_long_question(self):
+    def test_converts_to_high_level_summary(self):
         summary = self.processor._summarize_question(
             "Can you walk me through how your team evaluates product decisions across multiple stakeholder groups and deadlines?"
         )
-        assert summary.endswith("...")
-        assert len(summary.split()) <= 14
+        assert summary == "How your team evaluates product decisions across multiple stakeholder groups"
 
 
 class TestSendQuestion:

@@ -11,20 +11,29 @@ interface RoomProps {
 type CountdownState = '3' | '2' | '1' | 'dots' | 'fading' | 'done'
 
 interface DisplayQuestion {
-  full: string
   summary: string
 }
 
-function summarizeQuestion(question: string, maxWords = 14): string {
-  const cleaned = question.trim().replace(/\s+/g, ' ').replace(/[?.!\s]+$/, '')
-  if (!cleaned) return question
+const summaryLeadPatterns = [
+  /^(?:can|could|would|will|do|does|did|is|are|was|were|have|has|had)\s+you\s+/i,
+  /^(?:please\s+)?(?:tell|walk|talk|take|describe|share|explain)\s+me(?:\s+through)?\s+/i,
+  /^help\s+me\s+understand\s+/i,
+]
 
-  const words = cleaned.split(' ')
-  if (words.length <= maxWords) {
-    return cleaned
+function summarizeQuestion(question: string): string {
+  let text = question.trim().replace(/\s+/g, ' ').replace(/[?.!\s]+$/, '')
+  if (!text) return question
+
+  text = text.replace(/^(?:and|so|okay|ok|alright|great|thanks|thank you)[,\s]+/i, '').trim()
+  for (const pattern of summaryLeadPatterns) {
+    text = text.replace(pattern, '').trim()
   }
 
-  return `${words.slice(0, maxWords).join(' ').replace(/[,:;]+$/, '')}...`
+  const firstClause = text.split(/(?:,|;|\sand\s|\sor\s|\sbecause\s|\sso that\s)/i, 1)[0]?.trim()
+  const summary = firstClause || text
+  if (!summary) return question
+
+  return summary.charAt(0).toUpperCase() + summary.slice(1)
 }
 
 export function Room({ thankYouUrl }: RoomProps) {
@@ -71,7 +80,7 @@ export function Room({ thankYouUrl }: RoomProps) {
         ? payload.summary.trim()
         : summarizeQuestion(question)
 
-      setCurrentQuestion({ full: question, summary })
+      setCurrentQuestion({ summary })
     }
 
     daily.on('app-message', handleAppMessage)
@@ -127,7 +136,7 @@ export function Room({ thankYouUrl }: RoomProps) {
         </div>
       )}
       {currentQuestion && (
-        <div className="current-question" title={currentQuestion.full}>
+        <div className="current-question">
           <div className="current-question-label">Current question</div>
           <div className="current-question-summary">{currentQuestion.summary}</div>
         </div>
