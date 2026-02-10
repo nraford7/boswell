@@ -23,7 +23,8 @@ from boswell.server.config import get_settings
 from boswell.server.database import get_session
 from boswell.server.email import send_invitation_email
 from boswell.server.main import templates
-from boswell.server.models import Analysis, Interview, InterviewAngle, InterviewStatus, Project, InterviewTemplate, Transcript, User
+from boswell.server.models import Analysis, Interview, InterviewAngle, InterviewStatus, Project, InterviewTemplate, ProjectRole, ProjectShare, Transcript, User
+from boswell.server.authorization import check_project_access
 from boswell.server.routes.auth import get_current_user
 
 # Import ingestion functions
@@ -81,14 +82,28 @@ async def dashboard(
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """Dashboard home page showing list of projects for the user's team."""
-    # Query projects without eager loading interviews
-    result = await db.execute(
+    """Dashboard home page showing list of projects the user has access to."""
+    # My Projects (owner)
+    owned_result = await db.execute(
         select(Project)
-        .where(Project.team_id == user.team_id)
+        .join(ProjectShare, ProjectShare.project_id == Project.id)
+        .where(ProjectShare.user_id == user.id)
+        .where(ProjectShare.role == ProjectRole.owner)
         .order_by(Project.created_at.desc())
     )
-    projects = result.scalars().all()
+    owned_projects = owned_result.scalars().all()
+
+    # Shared with me
+    shared_result = await db.execute(
+        select(Project)
+        .join(ProjectShare, ProjectShare.project_id == Project.id)
+        .where(ProjectShare.user_id == user.id)
+        .where(ProjectShare.role != ProjectRole.owner)
+        .order_by(Project.created_at.desc())
+    )
+    shared_projects = shared_result.scalars().all()
+
+    projects = owned_projects + shared_projects
 
     # Get interview counts per project in one aggregate query
     project_ids = [p.id for p in projects]
@@ -127,10 +142,10 @@ async def project_new_form(
     db: AsyncSession = Depends(get_session),
 ):
     """Show the new interview form."""
-    # Fetch templates for the user's team
+    # Fetch templates created by this user
     result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     interview_templates = result.scalars().all()
@@ -213,11 +228,11 @@ async def project_new_submit(
     if template_id and template_id.strip():
         try:
             template_uuid = UUID(template_id)
-            # Verify template belongs to team
+            # Verify template belongs to user
             template_result = await db.execute(
                 select(InterviewTemplate)
                 .where(InterviewTemplate.id == template_uuid)
-                .where(InterviewTemplate.team_id == user.team_id)
+                .where(InterviewTemplate.created_by == user.id)
             )
             if template_result.scalar_one_or_none() is not None:
                 parsed_template_id = template_uuid
@@ -226,7 +241,6 @@ async def project_new_submit(
 
     # Create the project (WITHOUT interview)
     project = Project(
-        team_id=user.team_id,
         name=name,
         topic=topic,
         template_id=parsed_template_id,
@@ -239,6 +253,13 @@ async def project_new_submit(
     )
     db.add(project)
     await db.flush()
+    # Create owner share
+    db.add(ProjectShare(
+        project_id=project.id,
+        user_id=user.id,
+        role=ProjectRole.owner,
+        granted_by=user.id,
+    ))
 
     # Enqueue async research processing if needed
     if has_research:
@@ -281,14 +302,15 @@ async def project_detail(
     )
     project = result.scalar_one_or_none()
 
-    # Check if project exists and belongs to user's team
-    if project is None or project.team_id != user.team_id:
+    # Check if project exists and user has access
+    if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.view, db)
 
     # Fetch templates for public link configuration
     templates_result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     interview_templates = templates_result.scalars().all()
@@ -316,14 +338,13 @@ async def generate_public_link(
 ):
     """Generate or regenerate a public interview link for a project."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.owner, db)
 
     # Generate a secure random token
     project.public_link_token = secrets.token_urlsafe(32)
@@ -344,14 +365,13 @@ async def disable_public_link(
 ):
     """Disable the public interview link for a project."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.owner, db)
 
     project.public_link_token = None
     await db.commit()
@@ -372,24 +392,23 @@ async def set_template(
 ):
     """Set the default interview template for the project."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Parse and validate template_id
     if template_id and template_id.strip():
         try:
             template_uuid = UUID(template_id)
-            # Verify template belongs to team
+            # Verify template belongs to user
             template_result = await db.execute(
                 select(InterviewTemplate)
                 .where(InterviewTemplate.id == template_uuid)
-                .where(InterviewTemplate.team_id == user.team_id)
+                .where(InterviewTemplate.created_by == user.id)
             )
             template = template_result.scalar_one_or_none()
             if template is None:
@@ -422,19 +441,18 @@ async def interview_new_form(
 ):
     """Show the new interview form for a project."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
-    # Fetch templates for this team
+    # Fetch templates for this user
     templates_result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     team_templates = templates_result.scalars().all()
@@ -477,14 +495,13 @@ async def interview_new_submit(
     """Create a new interview for a project."""
     # Fetch project
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Validate name
     name = name.strip()
@@ -573,7 +590,7 @@ async def interview_new_submit(
         # Save as template if requested
         if save_as_template and new_template_name and new_template_name.strip():
             new_template = InterviewTemplate(
-                team_id=user.team_id,
+                created_by=user.id,
                 name=new_template_name.strip(),
                 questions=interview_questions,
                 angle=interview_angle or InterviewAngle.exploratory,
@@ -639,10 +656,10 @@ async def templates_list(
     user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ):
-    """List all templates for the user's team."""
+    """List all templates for the user."""
     result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     interview_templates = result.scalars().all()
@@ -769,7 +786,7 @@ async def template_new_submit(
 
     # Create the template
     template = InterviewTemplate(
-        team_id=user.team_id,
+        created_by=user.id,
         name=name,
         description=description,
         default_minutes=default_minutes,
@@ -797,7 +814,7 @@ async def template_edit_form(
     result = await db.execute(
         select(InterviewTemplate)
         .where(InterviewTemplate.id == template_id)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
     )
     template = result.scalar_one_or_none()
 
@@ -835,7 +852,7 @@ async def template_edit_submit(
     result = await db.execute(
         select(InterviewTemplate)
         .where(InterviewTemplate.id == template_id)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
     )
     template = result.scalar_one_or_none()
 
@@ -950,7 +967,7 @@ async def template_delete(
     result = await db.execute(
         select(InterviewTemplate)
         .where(InterviewTemplate.id == template_id)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
     )
     template = result.scalar_one_or_none()
 
@@ -1021,14 +1038,13 @@ async def invite_form(
     """Show the invite form for a project."""
     # Fetch project
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     return templates.TemplateResponse(
         request=request,
@@ -1051,14 +1067,13 @@ async def invite_submit(
     """Bulk import interviews from CSV and send invitations."""
     # Fetch project
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Read and parse CSV
     content = await csv_file.read()
@@ -1191,10 +1206,10 @@ async def bulk_import_form(
     db: AsyncSession = Depends(get_session),
 ):
     """Show the bulk import form."""
-    # Fetch templates for the user's team
+    # Fetch templates for the user
     result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     interview_templates = result.scalars().all()
@@ -1254,13 +1269,10 @@ async def bulk_import_submit(
         if row["project_id"]:
             # Use existing project
             project_id = UUID(row["project_id"])
-            # Verify project belongs to user's team
-            result = await db.execute(
-                select(Project)
-                .where(Project.id == project_id)
-                .where(Project.team_id == user.team_id)
-            )
-            if result.scalar_one_or_none() is None:
+            # Verify user has collaborate access to the project
+            try:
+                await check_project_access(user.id, project_id, ProjectRole.collaborate, db)
+            except HTTPException:
                 logger.warning(
                     f"Skipping row: project {project_id} not found or not accessible"
                 )
@@ -1273,13 +1285,19 @@ async def bulk_import_submit(
                 project_id = topic_to_project[topic].id
             else:
                 project = Project(
-                    team_id=user.team_id,
                     topic=topic,
                     target_minutes=30,
                     created_by=user.id,
                 )
                 db.add(project)
                 await db.flush()
+                # Create owner share
+                db.add(ProjectShare(
+                    project_id=project.id,
+                    user_id=user.id,
+                    role=ProjectRole.owner,
+                    granted_by=user.id,
+                ))
                 topic_to_project[topic] = project
                 project_id = project.id
                 projects_created += 1
@@ -1336,9 +1354,8 @@ async def create_followup_interview(
     if original is None:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Verify project belongs to user's team
-    if original.project.team_id != user.team_id:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    # Verify user has access to the project
+    await check_project_access(user.id, original.project_id, ProjectRole.collaborate, db)
 
     # Create the follow-up interview (new magic_token generated automatically)
     followup = Interview(
@@ -1389,9 +1406,8 @@ async def delete_interview(
     if interview is None:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Verify project belongs to user's team
-    if interview.project.team_id != user.team_id:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    # Verify user has access to the project
+    await check_project_access(user.id, interview.project_id, ProjectRole.collaborate, db)
 
     await db.delete(interview)
     await db.flush()
@@ -1425,15 +1441,14 @@ async def bulk_delete_interviews(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid interview ID format")
 
-    # Fetch project to verify ownership
+    # Fetch project to verify access
     project_result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = project_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Delete interviews that belong to this project
     result = await db.execute(
@@ -1476,13 +1491,12 @@ async def bulk_remind_interviews(
 
     # Fetch project
     project_result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = project_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.operate, db)
 
     # Fetch eligible interviews (invited or started, with email)
     result = await db.execute(
@@ -1541,13 +1555,12 @@ async def bulk_followup_interviews(
 
     # Fetch project
     project_result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = project_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Fetch completed interviews only
     result = await db.execute(
@@ -1596,13 +1609,12 @@ async def bulk_download_transcripts(
 
     # Fetch project
     project_result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = project_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.view, db)
 
     # Fetch interviews with transcripts
     result = await db.execute(
@@ -1663,14 +1675,13 @@ async def delete_project(
     """
     # Fetch the project
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.owner, db)
 
     await db.delete(project)
     await db.flush()
@@ -1713,9 +1724,8 @@ async def view_transcript(
     if interview is None:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Verify project belongs to user's team
-    if interview.project.team_id != user.team_id:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    # Verify user has access to the project
+    await check_project_access(user.id, interview.project_id, ProjectRole.view, db)
 
     if not interview.transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
@@ -1765,9 +1775,8 @@ async def download_transcript(
     if interview is None:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Verify project belongs to user's team
-    if interview.project.team_id != user.team_id:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    # Verify user has access to the project
+    await check_project_access(user.id, interview.project_id, ProjectRole.view, db)
 
     if not interview.transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
@@ -1881,19 +1890,18 @@ async def edit_project_form(
 ):
     """Show the project edit form."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Fetch templates for public link configuration
     templates_result = await db.execute(
         select(InterviewTemplate)
-        .where(InterviewTemplate.team_id == user.team_id)
+        .where(InterviewTemplate.created_by == user.id)
         .order_by(InterviewTemplate.name)
     )
     interview_templates = templates_result.scalars().all()
@@ -1936,14 +1944,13 @@ async def edit_project(
 ):
     """Save project edits."""
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Update fields
     project.name = name.strip()
@@ -1963,11 +1970,11 @@ async def edit_project(
     if template_id and template_id.strip():
         try:
             template_uuid = UUID(template_id)
-            # Verify template belongs to team
+            # Verify template belongs to user
             template_result = await db.execute(
                 select(InterviewTemplate)
                 .where(InterviewTemplate.id == template_uuid)
-                .where(InterviewTemplate.team_id == user.team_id)
+                .where(InterviewTemplate.created_by == user.id)
             )
             if template_result.scalar_one_or_none() is not None:
                 project.template_id = template_uuid
@@ -1999,14 +2006,13 @@ async def add_questions_from_interview(
     """
     # Fetch project
     result = await db.execute(
-        select(Project)
-        .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
+        select(Project).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.collaborate, db)
 
     # Fetch interview with analysis
     interview_result = await db.execute(
@@ -2090,12 +2096,12 @@ async def download_all_transcripts(
             selectinload(Project.interviews).selectinload(Interview.transcript)
         )
         .where(Project.id == project_id)
-        .where(Project.team_id == user.team_id)
     )
     project = result.scalar_one_or_none()
 
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    await check_project_access(user.id, project.id, ProjectRole.view, db)
 
     # Collect all completed interviews with transcripts
     all_transcripts = []
