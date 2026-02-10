@@ -1,11 +1,13 @@
 """SQLAlchemy database models for Boswell server."""
 
 import enum
+import hashlib
 import secrets
 from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -55,9 +57,138 @@ class JobStatus(str, enum.Enum):
     failed = "failed"
 
 
+class ProjectRole(str, enum.Enum):
+    """Role for project sharing. Ordered from least to most privilege."""
+    view = "view"
+    operate = "operate"
+    collaborate = "collaborate"
+    owner = "owner"
+
+    @property
+    def level(self) -> int:
+        return _ROLE_LEVELS[self]
+
+    def __ge__(self, other):
+        if not isinstance(other, ProjectRole):
+            return NotImplemented
+        return self.level >= other.level
+
+    def __gt__(self, other):
+        if not isinstance(other, ProjectRole):
+            return NotImplemented
+        return self.level > other.level
+
+    def __le__(self, other):
+        if not isinstance(other, ProjectRole):
+            return NotImplemented
+        return self.level <= other.level
+
+    def __lt__(self, other):
+        if not isinstance(other, ProjectRole):
+            return NotImplemented
+        return self.level < other.level
+
+
+_ROLE_LEVELS = {
+    ProjectRole.view: 0,
+    ProjectRole.operate: 1,
+    ProjectRole.collaborate: 2,
+    ProjectRole.owner: 3,
+}
+
+
 def generate_magic_token() -> str:
     """Generate a secure magic token for guest access."""
     return secrets.token_urlsafe(48)
+
+
+def _hash_token(raw_token: str) -> str:
+    """SHA-256 hash a raw token for storage."""
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+class ProjectShare(Base):
+    """Per-project access grant. Authorization source of truth."""
+    __tablename__ = "project_shares"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    project_id: Mapped[UUID] = mapped_column(
+        ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[ProjectRole] = mapped_column(
+        Enum(ProjectRole, name="projectrole"), nullable=False
+    )
+    granted_by: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    project: Mapped["Project"] = relationship("Project", back_populates="shares")
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    granter: Mapped[Optional["User"]] = relationship("User", foreign_keys=[granted_by])
+
+    __table_args__ = (
+        sa.UniqueConstraint("project_id", "user_id", name="uq_project_shares_project_user"),
+        sa.Index("ix_project_shares_user_project", "user_id", "project_id"),
+        sa.Index("ix_project_shares_project_role", "project_id", "role"),
+    )
+
+
+class AccountInvite(Base):
+    """Invite link for sharing a project and optionally creating an account."""
+    __tablename__ = "account_invites"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_prefix: Mapped[str] = mapped_column(String(12), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    invited_by: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("interviews.id", ondelete="CASCADE"), nullable=True
+    )
+    role: Mapped[Optional[ProjectRole]] = mapped_column(
+        Enum(ProjectRole, name="projectrole", create_constraint=False), nullable=True
+    )
+    claimed_by_user_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    inviter: Mapped["User"] = relationship("User", foreign_keys=[invited_by])
+    project: Mapped[Optional["Project"]] = relationship("Project")
+    claimed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[claimed_by_user_id])
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "(project_id IS NULL AND role IS NULL) OR (project_id IS NOT NULL AND role IS NOT NULL)",
+            name="ck_invite_project_role_together",
+        ),
+        sa.Index("ix_invite_email_status", "email", "claimed_at", "revoked_at", "expires_at"),
+        sa.Index("ix_invite_project_status", "project_id", "claimed_at", "revoked_at"),
+    )
 
 
 class Team(Base):
@@ -94,6 +225,10 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -183,6 +318,9 @@ class Project(Base):
     )
     template: Mapped[Optional["InterviewTemplate"]] = relationship(
         "InterviewTemplate", foreign_keys=[template_id]
+    )
+    shares: Mapped[list["ProjectShare"]] = relationship(
+        "ProjectShare", back_populates="project", cascade="all, delete-orphan"
     )
 
 
