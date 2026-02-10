@@ -46,6 +46,7 @@ server = [
     "python-multipart>=0.0.6",
     "resend>=0.8.0",
     "itsdangerous>=2.1.2",
+    "passlib[bcrypt]>=1.7.4",
 ]
 dev = [
     "pytest>=8.0.0",
