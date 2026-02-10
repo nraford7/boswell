@@ -53,25 +53,19 @@ async def require_auth(
     request: Request,
     user: Optional[User] = Depends(get_current_user),
 ) -> User:
-    """Dependency that requires authentication.
-
-    Redirects to login page if user is not authenticated.
-
-    Args:
-        request: The incoming request.
-        user: The current user from get_current_user.
-
-    Returns:
-        The authenticated User object.
-
-    Raises:
-        HTTPException: 401 if user is not authenticated.
-    """
+    """Require authentication. Redirect passwordless users to set-password."""
     if user is None:
         raise HTTPException(
             status_code=401,
             detail="Not authenticated",
             headers={"Location": "/admin/login"},
+        )
+    # Gate: force password setup for migrating users
+    if not user.password_hash and request.url.path not in ("/admin/set-password", "/admin/logout"):
+        from fastapi.responses import RedirectResponse
+        raise HTTPException(
+            status_code=307,
+            headers={"Location": "/admin/set-password"},
         )
     return user
 

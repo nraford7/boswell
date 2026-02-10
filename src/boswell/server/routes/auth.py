@@ -265,6 +265,53 @@ async def logout(request: Request):
     return response
 
 
+@router.get("/set-password")
+async def set_password_page(
+    request: Request,
+    user: Optional[User] = Depends(get_current_user),
+):
+    """Show password setup page for users who don't have one yet."""
+    if not user:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    if user.password_hash:
+        return RedirectResponse(url="/admin/", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/set_password.html",
+        context={"user": user, "message": None},
+    )
+
+
+@router.post("/set-password")
+async def set_password_submit(
+    request: Request,
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    user: Optional[User] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Set password for existing user migrating from magic link."""
+    if not user:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    if password != password_confirm:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/set_password.html",
+            context={"user": user, "message": "Passwords do not match."},
+        )
+
+    if len(password) < 8:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/set_password.html",
+            context={"user": user, "message": "Password must be at least 8 characters."},
+        )
+
+    user.password_hash = hash_password(password)
+    return RedirectResponse(url="/admin/", status_code=303)
+
+
 @router.get("/invite/{token}")
 async def invite_page(
     request: Request,
