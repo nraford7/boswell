@@ -299,6 +299,8 @@ async def set_password_submit(
         )
 
     user.password_hash = hash_password(password)
+    db.add(user)
+    await db.commit()
     return RedirectResponse(url="/admin/", status_code=303)
 
 
