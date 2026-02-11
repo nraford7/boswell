@@ -2387,7 +2387,7 @@ async def account_settings(
     return templates.TemplateResponse(
         request=request,
         name="admin/account_settings.html",
-        context={"user": user, "message": None},
+        context={"user": user, "message": None, "active_tab": "account"},
     )
 
 
@@ -2410,13 +2410,13 @@ async def update_account(
             return templates.TemplateResponse(
                 request=request,
                 name="admin/account_settings.html",
-                context={"user": user, "message": "Current password is incorrect."},
+                context={"user": user, "message": "Current password is incorrect.", "active_tab": "account"},
             )
         if len(new_password) < 8:
             return templates.TemplateResponse(
                 request=request,
                 name="admin/account_settings.html",
-                context={"user": user, "message": "New password must be at least 8 characters."},
+                context={"user": user, "message": "New password must be at least 8 characters.", "active_tab": "account"},
             )
         user.password_hash = hash_password(new_password)
 
@@ -2425,7 +2425,7 @@ async def update_account(
     return templates.TemplateResponse(
         request=request,
         name="admin/account_settings.html",
-        context={"user": user, "message": "Settings updated."},
+        context={"user": user, "message": "Settings updated.", "active_tab": "account"},
     )
 
 
