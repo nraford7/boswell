@@ -402,7 +402,7 @@
             <strong>Invitation created successfully!</strong>
             <div class="invite-link-box">
                 <span class="invite-link-text" id="inviteLinkText">{{ invite_link }}</span>
-                <button type="button" class="copy-btn" onclick="copyInviteLink()">
+                <button type="button" class="copy-btn" onclick="copyInviteLink(event)">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
                         <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
@@ -479,16 +479,16 @@
                     <td class="text-muted">{{ u.created_at.strftime('%b %d, %Y') }}</td>
                     <td class="actions-cell">
                         {% if u.id != user.id %}
-                        <button type="button" class="btn btn-outline btn-sm" onclick="openEditModal('{{ u.id }}', '{{ u.name }}', '{{ u.email }}')">Edit</button>
-                        <button type="button" class="btn btn-outline btn-sm" onclick="openResetPasswordModal('{{ u.id }}', '{{ u.name }}')">Reset Password</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openEditModal('{{ u.id }}', {{ u.name|tojson }}, {{ u.email|tojson }})">Edit</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openResetPasswordModal('{{ u.id }}', {{ u.name|tojson }})">Reset Password</button>
                         {% if u.deactivated_at %}
                         <form method="post" action="/admin/settings/users/{{ u.id }}/reactivate" style="display: inline;">
                             <button type="submit" class="btn btn-outline btn-sm">Reactivate</button>
                         </form>
                         {% else %}
-                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeactivateModal('{{ u.id }}', '{{ u.name }}')">Deactivate</button>
+                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeactivateModal('{{ u.id }}', {{ u.name|tojson }})">Deactivate</button>
                         {% endif %}
-                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeleteModal('{{ u.id }}', '{{ u.name }}')">Delete</button>
+                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeleteModal('{{ u.id }}', {{ u.name|tojson }})">Delete</button>
                         {% else %}
                         <span class="text-dim" style="font-size: 0.8125rem;">(You)</span>
                         {% endif %}
@@ -651,9 +651,9 @@ function toggleProjectDetails(userId) {
 }
 
 // Copy invite link
-function copyInviteLink() {
+function copyInviteLink(e) {
     const text = document.getElementById('inviteLinkText').textContent;
-    const btn = event.target.closest('.copy-btn');
+    const btn = e.target.closest('.copy-btn');
 
     navigator.clipboard.writeText(text).then(() => {
         const originalHTML = btn.innerHTML;

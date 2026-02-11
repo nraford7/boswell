@@ -185,6 +185,13 @@ async def login_submit(
             context={"message": "Account not found. You need an invite link to create an account."},
         )
 
+    if user.deactivated_at is not None:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "This account has been deactivated."},
+        )
+
     settings = get_settings()
     token = create_login_token(normalized_email)
     login_link = f"{settings.base_url}/admin/verify?token={token}"

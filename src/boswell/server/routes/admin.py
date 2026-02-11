@@ -2418,6 +2418,12 @@ async def update_account(
                 name="admin/account_settings.html",
                 context={"user": user, "message": "New password must be at least 8 characters.", "active_tab": "account"},
             )
+        if len(new_password.encode("utf-8")) > 72:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/account_settings.html",
+                context={"user": user, "message": "New password must be 72 bytes or fewer.", "active_tab": "account"},
+            )
         user.password_hash = hash_password(new_password)
 
     await db.commit()
@@ -2542,8 +2548,8 @@ async def admin_deactivate_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check last-admin guard
-    if target.is_admin:
+    # Check last-admin guard (only for active admins)
+    if target.is_admin and target.deactivated_at is None:
         count = await db.execute(
             select(func.count())
             .select_from(User)
@@ -2559,9 +2565,10 @@ async def admin_deactivate_user(
     # Check sole-owner guard
     sole_projects = await _get_sole_owner_projects(user_id, db)
     if sole_projects:
+        from urllib.parse import quote_plus
         names = ", ".join(p.name or p.topic for p in sole_projects)
         return RedirectResponse(
-            url=f"/admin/settings/users?error=User+is+sole+owner+of:+{names}.+Transfer+ownership+first.",
+            url=f"/admin/settings/users?error={quote_plus(f'User is sole owner of: {names}. Transfer ownership first.')}",
             status_code=303,
         )
 
@@ -2605,8 +2612,8 @@ async def admin_delete_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check last-admin guard
-    if target.is_admin:
+    # Check last-admin guard (only for active admins)
+    if target.is_admin and target.deactivated_at is None:
         count = await db.execute(
             select(func.count())
             .select_from(User)
@@ -2622,9 +2629,10 @@ async def admin_delete_user(
     # Check sole-owner guard
     sole_projects = await _get_sole_owner_projects(user_id, db)
     if sole_projects:
+        from urllib.parse import quote_plus
         names = ", ".join(p.name or p.topic for p in sole_projects)
         return RedirectResponse(
-            url=f"/admin/settings/users?error=User+is+sole+owner+of:+{names}.+Transfer+ownership+first.",
+            url=f"/admin/settings/users?error={quote_plus(f'User is sole owner of: {names}. Transfer ownership first.')}",
             status_code=303,
         )
 
