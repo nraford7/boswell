@@ -71,6 +71,42 @@ async def require_auth(
     return user
 
 
+async def require_admin(
+    request: Request,
+    user: User = Depends(require_auth),
+) -> User:
+    """Require admin access. Returns 403 for non-admins."""
+    if not user.is_admin or user.deactivated_at is not None:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def _get_sole_owner_projects(user_id: UUID, db: AsyncSession) -> list:
+    """Return projects where user_id is the only owner."""
+    # Find projects where this user is an owner
+    owned = await db.execute(
+        select(ProjectShare.project_id)
+        .where(ProjectShare.user_id == user_id)
+        .where(ProjectShare.role == ProjectRole.owner)
+    )
+    owned_project_ids = [row[0] for row in owned.all()]
+
+    sole_owner_projects = []
+    for pid in owned_project_ids:
+        count_result = await db.execute(
+            select(func.count())
+            .select_from(ProjectShare)
+            .where(ProjectShare.project_id == pid)
+            .where(ProjectShare.role == ProjectRole.owner)
+        )
+        if count_result.scalar_one() == 1:
+            proj_result = await db.execute(select(Project).where(Project.id == pid))
+            proj = proj_result.scalar_one_or_none()
+            if proj:
+                sole_owner_projects.append(proj)
+    return sole_owner_projects
+
+
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
