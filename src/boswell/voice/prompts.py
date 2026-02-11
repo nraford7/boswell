@@ -13,7 +13,9 @@ def _truncate_context(text: str, max_chars: int) -> str:
     """Truncate text to fit within character budget."""
     if not text or len(text) <= max_chars:
         return text or ""
-    budget = max(0, max_chars - len(_TRUNCATION_SUFFIX))
+    if max_chars <= len(_TRUNCATION_SUFFIX):
+        return text[:max_chars]
+    budget = max_chars - len(_TRUNCATION_SUFFIX)
     truncated = text[:budget]
     last_period = truncated.rfind(".")
     if last_period > budget * 0.7:

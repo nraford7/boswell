@@ -306,7 +306,7 @@ async def project_detail(
     # Check if project exists and user has access
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    await check_project_access(user.id, project.id, ProjectRole.view, db)
+    role = await check_project_access(user.id, project.id, ProjectRole.view, db)
 
     # Fetch templates for public link configuration
     templates_result = await db.execute(
@@ -326,6 +326,7 @@ async def project_detail(
             "interviews": project.interviews,
             "base_url": settings.base_url,
             "templates": interview_templates,
+            "is_owner": role == ProjectRole.owner,
         },
     )
 
@@ -2364,7 +2365,7 @@ async def update_account(
     db: AsyncSession = Depends(get_session),
 ):
     """Update account name and/or password."""
-    from boswell.server.routes.auth import hash_password, verify_password
+    from boswell.server.auth_utils import hash_password, verify_password
 
     user.name = name.strip()
 

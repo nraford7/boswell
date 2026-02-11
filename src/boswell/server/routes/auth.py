@@ -16,22 +16,9 @@ from boswell.server.database import get_session
 from boswell.server.email import send_admin_login_email
 from boswell.server.main import templates
 from boswell.server.models import User, AccountInvite, ProjectShare, ProjectRole, _hash_token
-
-import bcrypt
+from boswell.server.auth_utils import hash_password, verify_password
 
 router = APIRouter()
-
-
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    pw = password.encode("utf-8")[:72]
-    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    pw = password.encode("utf-8")[:72]
-    return bcrypt.checkpw(pw, password_hash.encode("utf-8"))
 
 
 # -----------------------------------------------------------------------------
@@ -284,6 +271,8 @@ async def set_password_submit(
     """Set password for existing user migrating from magic link."""
     if not user:
         return RedirectResponse(url="/admin/login", status_code=303)
+    if user.password_hash:
+        return RedirectResponse(url="/admin/", status_code=303)
 
     if password != password_confirm:
         return templates.TemplateResponse(
@@ -297,6 +286,13 @@ async def set_password_submit(
             request=request,
             name="admin/set_password.html",
             context={"user": user, "message": "Password must be at least 8 characters."},
+        )
+
+    if len(password.encode("utf-8")) > 72:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/set_password.html",
+            context={"user": user, "message": "Password must be 72 bytes or fewer."},
         )
 
     user.password_hash = hash_password(password)
@@ -416,6 +412,18 @@ async def claim_invite(
                     "email": invite.email,
                     "token": token,
                     "message": "Name and password are required.",
+                },
+            )
+        if len(password.encode("utf-8")) > 72:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/invite_claim.html",
+                context={
+                    "invite": invite,
+                    "existing_user": False,
+                    "email": invite.email,
+                    "token": token,
+                    "message": "Password must be 72 bytes or fewer.",
                 },
             )
         user = User(

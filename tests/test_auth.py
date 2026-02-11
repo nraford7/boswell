@@ -2,20 +2,7 @@
 
 import pytest
 
-# Import directly from passlib to avoid circular import during tests
-from passlib.context import CryptContext
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return _pwd_context.hash(password)
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    return _pwd_context.verify(password, password_hash)
+from boswell.server.auth_utils import hash_password, verify_password
 
 
 class TestPasswordHelpers:
@@ -45,3 +32,21 @@ class TestPasswordHelpers:
         hashed = hash_password("")
         assert verify_password("", hashed)
         assert not verify_password("notempty", hashed)
+
+    def test_long_ascii_password(self):
+        """Passwords longer than 72 bytes are truncated by bcrypt."""
+        long_pw = "a" * 100
+        hashed = hash_password(long_pw)
+        assert verify_password(long_pw, hashed)
+
+    def test_long_utf8_password(self):
+        """Multi-byte UTF-8 passwords longer than 72 bytes are handled."""
+        # Each character is 3 bytes in UTF-8, so 30 chars = 90 bytes > 72
+        long_pw = "\u00e9" * 40  # é is 2 bytes each, 80 bytes total
+        hashed = hash_password(long_pw)
+        assert verify_password(long_pw, hashed)
+
+    def test_malformed_hash_returns_false(self):
+        """verify_password should return False for corrupted hashes."""
+        assert not verify_password("anything", "not-a-valid-hash")
+        assert not verify_password("anything", "")
