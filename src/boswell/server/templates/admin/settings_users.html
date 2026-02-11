@@ -1,0 +1,751 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Boswell{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-top: 2rem;
+    }
+
+    .alert-success {
+        background-color: var(--success-bg);
+        color: var(--success);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .alert-error {
+        background-color: var(--error-bg);
+        color: var(--error);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .alert-info {
+        background-color: var(--accent-subtle);
+        color: var(--accent);
+        border: 1px solid var(--border-accent);
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .alert-info-content {
+        flex: 1;
+    }
+
+    .invite-link-box {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 0.875rem 1rem;
+        font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+        font-size: 0.875rem;
+        color: var(--fg);
+        margin-top: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .invite-link-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.5rem;
+    }
+
+    .search-box {
+        position: relative;
+        flex: 1;
+        min-width: 200px;
+        max-width: 320px;
+    }
+
+    .search-box input {
+        padding-left: 2.5rem;
+        height: 38px;
+    }
+
+    .search-box svg {
+        position: absolute;
+        left: 0.875rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        color: var(--fg-dim);
+        pointer-events: none;
+    }
+
+    .users-table {
+        width: 100%;
+    }
+
+    .users-table td {
+        vertical-align: middle;
+    }
+
+    .user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+    }
+
+    .user-name {
+        font-weight: 500;
+        color: var(--fg);
+    }
+
+    .user-email {
+        font-size: 0.8125rem;
+        color: var(--fg-dim);
+    }
+
+    .badges-cell {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+    }
+
+    .status-active {
+        background-color: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
+    }
+
+    .status-deactivated {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+    }
+
+    .status-admin {
+        background-color: rgba(212, 168, 85, 0.15);
+        color: var(--accent);
+    }
+
+    .project-count {
+        color: var(--accent);
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color var(--transition-fast);
+    }
+
+    .project-count:hover {
+        color: var(--accent-hover);
+        text-decoration: underline;
+    }
+
+    .project-count.disabled {
+        color: var(--fg-dim);
+        cursor: default;
+        pointer-events: none;
+    }
+
+    .project-details {
+        display: none;
+        background: var(--bg-surface);
+        border-top: 1px solid var(--border);
+    }
+
+    .project-details.visible {
+        display: table-row;
+    }
+
+    .project-details td {
+        padding: 1.5rem 1rem;
+    }
+
+    .project-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .project-list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+    }
+
+    .project-name {
+        color: var(--fg);
+        font-weight: 500;
+    }
+
+    .project-role {
+        color: var(--fg-muted);
+        font-size: 0.8125rem;
+    }
+
+    .actions-cell {
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .actions-cell .btn {
+        margin-left: 0.5rem;
+    }
+
+    .btn-danger {
+        color: #994444;
+        border-color: #994444;
+    }
+
+    .btn-danger:hover {
+        background: rgba(153, 68, 68, 0.1);
+        border-color: #cc6666;
+        color: #cc6666;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+    }
+
+    .empty-state svg {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+
+    .empty-state p {
+        color: var(--fg-dim);
+        margin-bottom: 1rem;
+    }
+
+    .users-table tbody tr {
+        animation: fadeIn 0.4s ease forwards;
+        opacity: 0;
+    }
+
+    .users-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
+    .users-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
+    .users-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
+    .users-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
+    .users-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
+
+    .users-table tbody tr.hidden { display: none; }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+    }
+
+    .modal-overlay.visible {
+        display: flex;
+    }
+
+    .modal {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        max-width: 400px;
+        width: 90%;
+    }
+
+    .modal h3 {
+        margin: 0 0 1rem;
+        font-size: 1.125rem;
+    }
+
+    .modal p {
+        margin: 0 0 1.5rem;
+        color: var(--fg-muted);
+    }
+
+    .modal .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .modal .actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+    }
+
+    .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem 0.875rem;
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--fg-muted);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .copy-btn:hover {
+        background: var(--accent-subtle);
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .copy-btn.copied {
+        background: var(--success-bg);
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    .copy-btn svg {
+        width: 14px;
+        height: 14px;
+        margin-right: 0.375rem;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<nav class="nav">
+    <div class="nav-content">
+        <a href="/admin/" class="nav-brand">Boswell x EMIR</a>
+        <div class="nav-links">
+            <a href="/admin/">Projects</a>
+            <a href="/admin/templates">Interview Types</a>
+            <a href="/admin/settings" class="active">Settings</a>
+            <span class="text-muted">{{ user.name }}</span>
+            <form method="post" action="/admin/logout" style="display: inline;">
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <h1 class="page-title">Settings</h1>
+    </div>
+
+    <div class="tabs" style="margin-bottom: 2rem; border-bottom: 1px solid var(--border); display: flex; gap: 0;">
+        <a href="/admin/settings" class="tab-link {% if active_tab == 'account' %}active{% endif %}"
+           style="padding: 0.75rem 1.25rem; font-size: 0.875rem; font-weight: 500; color: {% if active_tab == 'account' %}var(--accent){% else %}var(--fg-muted){% endif %}; border-bottom: 2px solid {% if active_tab == 'account' %}var(--accent){% else %}transparent{% endif %}; text-decoration: none; margin-bottom: -1px;">
+            Account
+        </a>
+        {% if user.is_admin %}
+        <a href="/admin/settings/users" class="tab-link {% if active_tab == 'users' %}active{% endif %}"
+           style="padding: 0.75rem 1.25rem; font-size: 0.875rem; font-weight: 500; color: {% if active_tab == 'users' %}var(--accent){% else %}var(--fg-muted){% endif %}; border-bottom: 2px solid {% if active_tab == 'users' %}var(--accent){% else %}transparent{% endif %}; text-decoration: none; margin-bottom: -1px;">
+            Users
+        </a>
+        {% endif %}
+    </div>
+
+    {% set message = request.query_params.get('message') %}
+    {% set error = request.query_params.get('error') %}
+    {% set invite_link = request.query_params.get('invite_link') %}
+
+    {% if message %}
+    <div class="alert-success">
+        {{ message }}
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert-error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if invite_link %}
+    <div class="alert-info">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16" style="flex-shrink: 0; margin-top: 2px;">
+            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+            <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+        </svg>
+        <div class="alert-info-content">
+            <strong>Invitation created successfully!</strong>
+            <div class="invite-link-box">
+                <span class="invite-link-text" id="inviteLinkText">{{ invite_link }}</span>
+                <button type="button" class="copy-btn" onclick="copyInviteLink()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                    </svg>
+                    Copy
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="section-header">
+            <h2>Team Members</h2>
+            <button type="button" class="btn" onclick="openInviteModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+                Invite User
+            </button>
+        </div>
+
+        {% if all_users %}
+        <div class="toolbar">
+            <div class="search-box">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search users..." oninput="filterTable()">
+            </div>
+        </div>
+
+        <table class="users-table" id="usersTable">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Projects</th>
+                    <th>Joined</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in all_users %}
+                <tr data-user-id="{{ u.id }}" data-name="{{ u.name|lower }}" data-email="{{ u.email|lower }}">
+                    <td>
+                        <div class="user-info">
+                            <span class="user-name">{{ u.name }}</span>
+                            <span class="user-email">{{ u.email }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="badges-cell">
+                            {% if u.deactivated_at %}
+                            <span class="badge status-deactivated">Deactivated</span>
+                            {% else %}
+                            <span class="badge status-active">Active</span>
+                            {% endif %}
+                            {% if u.is_admin %}
+                            <span class="badge status-admin">Admin</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% set project_count = u.project_shares|length %}
+                        {% if project_count > 0 %}
+                        <a href="#" class="project-count" onclick="toggleProjectDetails('{{ u.id }}'); return false;">
+                            {{ project_count }} project{{ 's' if project_count > 1 else '' }}
+                        </a>
+                        {% else %}
+                        <span class="project-count disabled">0 projects</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ u.created_at.strftime('%b %d, %Y') }}</td>
+                    <td class="actions-cell">
+                        {% if u.id != user.id %}
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openEditModal('{{ u.id }}', '{{ u.name }}', '{{ u.email }}')">Edit</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openResetPasswordModal('{{ u.id }}', '{{ u.name }}')">Reset Password</button>
+                        {% if u.deactivated_at %}
+                        <form method="post" action="/admin/settings/users/{{ u.id }}/reactivate" style="display: inline;">
+                            <button type="submit" class="btn btn-outline btn-sm">Reactivate</button>
+                        </form>
+                        {% else %}
+                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeactivateModal('{{ u.id }}', '{{ u.name }}')">Deactivate</button>
+                        {% endif %}
+                        <button type="button" class="btn btn-outline btn-sm btn-danger" onclick="openDeleteModal('{{ u.id }}', '{{ u.name }}')">Delete</button>
+                        {% else %}
+                        <span class="text-dim" style="font-size: 0.8125rem;">(You)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if u.project_shares %}
+                <tr class="project-details" id="project-details-{{ u.id }}">
+                    <td colspan="5">
+                        <ul class="project-list">
+                            {% for share in u.project_shares %}
+                            <li class="project-list-item">
+                                <span class="project-name">{{ share.project.name or share.project.topic }}</span>
+                                <span class="project-role">{{ share.role.value }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <p>No users found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Invite User Modal -->
+<div class="modal-overlay" id="inviteModal">
+    <div class="modal">
+        <h3>Invite User</h3>
+        <form method="post" action="/admin/settings/users/invite">
+            <div class="form-group">
+                <label for="invite_email">Email Address</label>
+                <input type="email" id="invite_email" name="email" required autofocus>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-outline" onclick="closeInviteModal()">Cancel</button>
+                <button type="submit" class="btn">Send Invite</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <h3>Edit User</h3>
+        <form method="post" id="editForm">
+            <div class="form-group">
+                <label for="edit_name">Name</label>
+                <input type="text" id="edit_name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="edit_email">Email</label>
+                <input type="email" id="edit_email" name="email" required>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+                <button type="submit" class="btn">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-overlay" id="resetPasswordModal">
+    <div class="modal">
+        <h3>Reset Password</h3>
+        <p>Set a new password for <strong id="resetPasswordUserName"></strong></p>
+        <form method="post" id="resetPasswordForm">
+            <div class="form-group">
+                <label for="new_password">New Password</label>
+                <input type="password" id="new_password" name="new_password" required autocomplete="new-password">
+                <p class="help-text">At least 8 characters</p>
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password">
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-outline" onclick="closeResetPasswordModal()">Cancel</button>
+                <button type="submit" class="btn">Reset Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Deactivate User Modal -->
+<div class="modal-overlay" id="deactivateModal">
+    <div class="modal">
+        <h3>Deactivate User</h3>
+        <p>Are you sure you want to deactivate <strong id="deactivateUserName"></strong>? They will no longer be able to log in.</p>
+        <form method="post" id="deactivateForm">
+            <div class="actions">
+                <button type="button" class="btn btn-outline" onclick="closeDeactivateModal()">Cancel</button>
+                <button type="submit" class="btn btn-danger">Deactivate</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete User Modal -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+        <h3>Delete User</h3>
+        <p>Are you sure you want to permanently delete <strong id="deleteUserName"></strong>? This action cannot be undone.</p>
+        <form method="post" id="deleteForm">
+            <div class="actions">
+                <button type="button" class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
+                <button type="submit" class="btn btn-danger">Delete User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Filter table
+function filterTable() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const rows = document.querySelectorAll('#usersTable tbody tr:not(.project-details)');
+
+    rows.forEach(row => {
+        const name = row.dataset.name || '';
+        const email = row.dataset.email || '';
+        const userId = row.dataset.userId;
+
+        const passesSearch = !searchTerm || name.includes(searchTerm) || email.includes(searchTerm);
+
+        if (passesSearch) {
+            row.classList.remove('hidden');
+            // Also hide project details when filtering
+            const detailsRow = document.getElementById(`project-details-${userId}`);
+            if (detailsRow && searchTerm) {
+                detailsRow.classList.remove('visible');
+            }
+        } else {
+            row.classList.add('hidden');
+            // Hide project details row too
+            const detailsRow = document.getElementById(`project-details-${userId}`);
+            if (detailsRow) {
+                detailsRow.classList.remove('visible');
+            }
+        }
+    });
+}
+
+// Toggle project details
+function toggleProjectDetails(userId) {
+    const detailsRow = document.getElementById(`project-details-${userId}`);
+    if (detailsRow) {
+        detailsRow.classList.toggle('visible');
+    }
+}
+
+// Copy invite link
+function copyInviteLink() {
+    const text = document.getElementById('inviteLinkText').textContent;
+    const btn = event.target.closest('.copy-btn');
+
+    navigator.clipboard.writeText(text).then(() => {
+        const originalHTML = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg>Copied';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = originalHTML;
+        }, 2000);
+    });
+}
+
+// Invite modal
+function openInviteModal() {
+    document.getElementById('inviteModal').classList.add('visible');
+    document.getElementById('invite_email').focus();
+}
+
+function closeInviteModal() {
+    document.getElementById('inviteModal').classList.remove('visible');
+    document.getElementById('invite_email').value = '';
+}
+
+// Edit modal
+function openEditModal(userId, userName, userEmail) {
+    const form = document.getElementById('editForm');
+    form.action = `/admin/settings/users/${userId}/edit`;
+    document.getElementById('edit_name').value = userName;
+    document.getElementById('edit_email').value = userEmail;
+    document.getElementById('editModal').classList.add('visible');
+    document.getElementById('edit_name').focus();
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('visible');
+}
+
+// Reset password modal
+function openResetPasswordModal(userId, userName) {
+    const form = document.getElementById('resetPasswordForm');
+    form.action = `/admin/settings/users/${userId}/reset-password`;
+    document.getElementById('resetPasswordUserName').textContent = userName;
+    document.getElementById('resetPasswordModal').classList.add('visible');
+    document.getElementById('new_password').focus();
+}
+
+function closeResetPasswordModal() {
+    document.getElementById('resetPasswordModal').classList.remove('visible');
+    document.getElementById('new_password').value = '';
+    document.getElementById('confirm_password').value = '';
+}
+
+// Deactivate modal
+function openDeactivateModal(userId, userName) {
+    const form = document.getElementById('deactivateForm');
+    form.action = `/admin/settings/users/${userId}/deactivate`;
+    document.getElementById('deactivateUserName').textContent = userName;
+    document.getElementById('deactivateModal').classList.add('visible');
+}
+
+function closeDeactivateModal() {
+    document.getElementById('deactivateModal').classList.remove('visible');
+}
+
+// Delete modal
+function openDeleteModal(userId, userName) {
+    const form = document.getElementById('deleteForm');
+    form.action = `/admin/settings/users/${userId}/delete`;
+    document.getElementById('deleteUserName').textContent = userName;
+    document.getElementById('deleteModal').classList.add('visible');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('visible');
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.classList.remove('visible');
+        }
+    });
+});
+
+// Close modals on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.classList.remove('visible');
+        });
+    }
+});
+</script>
+{% endblock %}
