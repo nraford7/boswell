@@ -109,7 +109,10 @@ async def get_current_user(
         return None
 
     result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if user and user.deactivated_at is not None:
+        return None
+    return user
 
 
 # -----------------------------------------------------------------------------
@@ -154,6 +157,12 @@ async def login_submit(
                 request=request,
                 name="admin/login.html",
                 context={"message": "Invalid email or password."},
+            )
+        if user.deactivated_at is not None:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin/login.html",
+                context={"message": "This account has been deactivated."},
             )
         # Success — create session
         session_token = create_session_token(user.id)
@@ -219,6 +228,13 @@ async def verify_token(
             request=request,
             name="admin/login.html",
             context={"message": "User not found. Please try again."},
+        )
+
+    if user.deactivated_at is not None:
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/login.html",
+            context={"message": "This account has been deactivated."},
         )
 
     # Create session token and redirect
