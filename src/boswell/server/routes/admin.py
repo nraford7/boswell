@@ -8,14 +8,14 @@ import io
 import logging
 import secrets
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -2456,4 +2456,230 @@ async def admin_users_list(
             "all_users": all_users,
             "active_tab": "users",
         },
+    )
+
+
+@router.post("/settings/users/{user_id}/edit")
+async def admin_edit_user(
+    request: Request,
+    user_id: UUID,
+    name: str = Form(...),
+    email: str = Form(...),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Update a user's name and email."""
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    normalized_email = email.strip().lower()
+    if normalized_email != target.email:
+        existing = await db.execute(select(User).where(User.email == normalized_email))
+        if existing.scalar_one_or_none():
+            return RedirectResponse(
+                url="/admin/settings/users?error=Email+already+in+use",
+                status_code=303,
+            )
+    target.name = name.strip()
+    target.email = normalized_email
+    await db.commit()
+    return RedirectResponse(url="/admin/settings/users?message=User+updated", status_code=303)
+
+
+@router.post("/settings/users/{user_id}/reset-password")
+async def admin_reset_password(
+    request: Request,
+    user_id: UUID,
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Admin sets a new password for a user."""
+    from boswell.server.auth_utils import hash_password
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if new_password != confirm_password:
+        return RedirectResponse(
+            url="/admin/settings/users?error=Passwords+do+not+match",
+            status_code=303,
+        )
+    if len(new_password) < 8:
+        return RedirectResponse(
+            url="/admin/settings/users?error=Password+must+be+at+least+8+characters",
+            status_code=303,
+        )
+    if len(new_password.encode("utf-8")) > 72:
+        return RedirectResponse(
+            url="/admin/settings/users?error=Password+must+be+72+bytes+or+fewer",
+            status_code=303,
+        )
+
+    target.password_hash = hash_password(new_password)
+    await db.commit()
+    return RedirectResponse(url="/admin/settings/users?message=Password+reset", status_code=303)
+
+
+@router.post("/settings/users/{user_id}/deactivate")
+async def admin_deactivate_user(
+    request: Request,
+    user_id: UUID,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Soft-deactivate a user."""
+    if user_id == user.id:
+        return RedirectResponse(
+            url="/admin/settings/users?error=Cannot+deactivate+your+own+account",
+            status_code=303,
+        )
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check last-admin guard
+    if target.is_admin:
+        count = await db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.is_admin == True)
+            .where(User.deactivated_at.is_(None))
+        )
+        if count.scalar_one() <= 1:
+            return RedirectResponse(
+                url="/admin/settings/users?error=Cannot+deactivate+the+last+admin",
+                status_code=303,
+            )
+
+    # Check sole-owner guard
+    sole_projects = await _get_sole_owner_projects(user_id, db)
+    if sole_projects:
+        names = ", ".join(p.name or p.topic for p in sole_projects)
+        return RedirectResponse(
+            url=f"/admin/settings/users?error=User+is+sole+owner+of:+{names}.+Transfer+ownership+first.",
+            status_code=303,
+        )
+
+    target.deactivated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return RedirectResponse(url="/admin/settings/users?message=User+deactivated", status_code=303)
+
+
+@router.post("/settings/users/{user_id}/reactivate")
+async def admin_reactivate_user(
+    request: Request,
+    user_id: UUID,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Reactivate a deactivated user."""
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target.deactivated_at = None
+    await db.commit()
+    return RedirectResponse(url="/admin/settings/users?message=User+reactivated", status_code=303)
+
+
+@router.post("/settings/users/{user_id}/delete")
+async def admin_delete_user(
+    request: Request,
+    user_id: UUID,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Permanently delete a user and cascade their access."""
+    if user_id == user.id:
+        return RedirectResponse(
+            url="/admin/settings/users?error=Cannot+delete+your+own+account",
+            status_code=303,
+        )
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check last-admin guard
+    if target.is_admin:
+        count = await db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.is_admin == True)
+            .where(User.deactivated_at.is_(None))
+        )
+        if count.scalar_one() <= 1:
+            return RedirectResponse(
+                url="/admin/settings/users?error=Cannot+delete+the+last+admin",
+                status_code=303,
+            )
+
+    # Check sole-owner guard
+    sole_projects = await _get_sole_owner_projects(user_id, db)
+    if sole_projects:
+        names = ", ".join(p.name or p.topic for p in sole_projects)
+        return RedirectResponse(
+            url=f"/admin/settings/users?error=User+is+sole+owner+of:+{names}.+Transfer+ownership+first.",
+            status_code=303,
+        )
+
+    # Revoke pending invites sent to this user's email
+    from boswell.server.models import AccountInvite
+    await db.execute(
+        update(AccountInvite)
+        .where(AccountInvite.email == target.email)
+        .where(AccountInvite.claimed_at.is_(None))
+        .where(AccountInvite.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
+
+    await db.delete(target)
+    await db.commit()
+    return RedirectResponse(url="/admin/settings/users?message=User+deleted", status_code=303)
+
+
+@router.post("/settings/users/invite")
+async def admin_invite_user(
+    request: Request,
+    email: str = Form(...),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a standalone account invite (no project attached)."""
+    from boswell.server.models import AccountInvite, _hash_token
+
+    normalized_email = email.strip().lower()
+
+    # Check if user already exists
+    existing = await db.execute(select(User).where(User.email == normalized_email))
+    if existing.scalar_one_or_none():
+        return RedirectResponse(
+            url="/admin/settings/users?error=User+already+has+an+account",
+            status_code=303,
+        )
+
+    raw_token = secrets.token_urlsafe(48)
+    invite = AccountInvite(
+        token_hash=_hash_token(raw_token),
+        token_prefix=raw_token[:12],
+        email=normalized_email,
+        invited_by=user.id,
+        project_id=None,
+        role=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+    db.add(invite)
+    await db.commit()
+
+    settings = get_settings()
+    invite_link = f"{settings.base_url}/admin/invite/{raw_token}"
+
+    return RedirectResponse(
+        url=f"/admin/settings/users?message=Invite+created&invite_link={invite_link}",
+        status_code=303,
     )
