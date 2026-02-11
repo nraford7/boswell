@@ -133,7 +133,7 @@ class ProjectShare(Base):
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="shares")
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="project_shares")
     granter: Mapped[Optional["User"]] = relationship("User", foreign_keys=[granted_by])
 
     __table_args__ = (
@@ -205,6 +205,20 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    is_admin: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, server_default=sa.text("false")
+    )
+    deactivated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    project_shares: Mapped[list["ProjectShare"]] = relationship(
+        "ProjectShare",
+        foreign_keys="ProjectShare.user_id",
+        back_populates="user",
+        lazy="select",
     )
 
 
