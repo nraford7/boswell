@@ -2427,3 +2427,33 @@ async def update_account(
         name="admin/account_settings.html",
         context={"user": user, "message": "Settings updated."},
     )
+
+
+# -----------------------------------------------------------------------------
+# Admin User Management Routes
+# -----------------------------------------------------------------------------
+
+
+@router.get("/settings/users")
+async def admin_users_list(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+):
+    """Admin user management dashboard."""
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.project_shares).selectinload(ProjectShare.project))
+        .order_by(User.created_at.desc())
+    )
+    all_users = result.scalars().unique().all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/settings_users.html",
+        context={
+            "user": user,
+            "all_users": all_users,
+            "active_tab": "users",
+        },
+    )
