@@ -85,7 +85,20 @@
 
 <div class="container">
     <div class="page-header">
-        <h1 class="page-title">Account <span>Settings</span></h1>
+        <h1 class="page-title">Settings</h1>
+    </div>
+
+    <div class="tabs" style="margin-bottom: 2rem; border-bottom: 1px solid var(--border); display: flex; gap: 0;">
+        <a href="/admin/settings" class="tab-link {% if active_tab == 'account' %}active{% endif %}"
+           style="padding: 0.75rem 1.25rem; font-size: 0.875rem; font-weight: 500; color: {% if active_tab == 'account' %}var(--accent){% else %}var(--fg-muted){% endif %}; border-bottom: 2px solid {% if active_tab == 'account' %}var(--accent){% else %}transparent{% endif %}; text-decoration: none; margin-bottom: -1px;">
+            Account
+        </a>
+        {% if user.is_admin %}
+        <a href="/admin/settings/users" class="tab-link {% if active_tab == 'users' %}active{% endif %}"
+           style="padding: 0.75rem 1.25rem; font-size: 0.875rem; font-weight: 500; color: {% if active_tab == 'users' %}var(--accent){% else %}var(--fg-muted){% endif %}; border-bottom: 2px solid {% if active_tab == 'users' %}var(--accent){% else %}transparent{% endif %}; text-decoration: none; margin-bottom: -1px;">
+            Users
+        </a>
+        {% endif %}
     </div>
 
     <div class="settings-card">
