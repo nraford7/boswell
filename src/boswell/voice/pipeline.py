@@ -20,6 +20,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from boswell.config import load_config
 from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
 from boswell.voice.acknowledgment import AcknowledgmentProcessor
+from boswell.voice.bracket_buffer import BracketBufferProcessor
 from boswell.voice.mode_detection import ModeDetectionProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
 from boswell.voice.strike_control import StrikeControlProcessor
@@ -153,6 +154,9 @@ async def create_pipeline(
     # Set up dynamic speed control (processes [SPEED:x] tags from LLM)
     speed_control_processor = SpeedControlProcessor(tts)
 
+    # Set up bracket buffer to reassemble split control tags before tag processors
+    bracket_buffer_processor = BracketBufferProcessor()
+
     # Set up mode detection for returning guests
     mode_detection_processor = ModeDetectionProcessor()
 
@@ -176,6 +180,7 @@ async def create_pipeline(
         acknowledgment_processor,  # Immediate filler acknowledgment
         context_aggregator.user(),
         llm,
+        bracket_buffer_processor,  # Reassemble split bracket tags into whole tokens
         strike_control_processor,  # Process strike tags and mark transcript
         speed_control_processor,  # Process speed tags and adjust TTS
         mode_detection_processor,  # Detect mode tags for returning guests

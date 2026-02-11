@@ -2,6 +2,14 @@
 
 AI research interviewer that conducts autonomous, voice-based interviews from research materials.
 
+## CRITICAL: No Docker — Source Code Only
+
+**NEVER read, write, modify, or reference any Docker files** (Dockerfile, Dockerfile.worker, Dockerfile.room-ui, docker-compose.yml, or anything in scripts/). These are legacy artifacts and are NOT the deployed application. All development and changes MUST be made to the git-tracked source code under `src/boswell/`. The application runs directly via `uv run`, not Docker.
+
+**Always read code from and make changes to**: `src/boswell/server/`, `src/boswell/voice/`, `room-ui/src/`
+
+**After making changes**: The deployed server needs to be restarted and migrations run (`uv run alembic upgrade head`) for changes to take effect.
+
 ## Purpose
 
 Boswell enables researchers, authors, and journalists to conduct substantive interviews at scale. Key capabilities:
@@ -25,7 +33,6 @@ Boswell enables researchers, authors, and journalists to conduct substantive int
 | TTS | ElevenLabs Turbo v2 (Rachel voice) |
 | LLM | Claude Sonnet 4 |
 | Frontend | React 18, TypeScript, Vite, @daily-co/daily-react |
-| Deployment | Docker multi-stage, docker-compose |
 
 ## Architecture
 
@@ -47,13 +54,13 @@ boswell/
 │       ├── models.py          # SQLAlchemy ORM models
 │       ├── worker.py          # Voice worker (polls DB, runs interviews)
 │       ├── routes/
-│       │   ├── admin.py       # Admin dashboard
+│       │   ├── admin.py       # Admin dashboard + user management
+│       │   ├── auth.py        # Authentication routes
 │       │   └── guest.py       # Public interview routes
 │       └── migrations/        # Alembic migrations
-├── room-ui/                   # React frontend for Daily.co rooms
-│   └── src/components/
-│       └── Room.tsx           # Main room view with audio gate
-└── docker-compose.yml
+└── room-ui/                   # React frontend for Daily.co rooms
+    └── src/components/
+        └── Room.tsx           # Main room view with audio gate
 ```
 
 ### Services
@@ -75,8 +82,9 @@ Daily.co Transport → Deepgram STT → TranscriptCollector
 
 | Model | Table Name | Purpose |
 |-------|------------|---------|
-| Team | teams | Organization unit |
-| User | users | Team members |
+| User | users | Authenticated users with is_admin flag |
+| ProjectShare | project_shares | User-project access (owner/collaborate/view) |
+| AccountInvite | account_invites | Token-based account invitations |
 | InterviewTemplate | interview_templates | Reusable configuration |
 | Project | interviews | Interview collection (legacy naming) |
 | Interview | guests | Individual guest interview (legacy naming) |
@@ -85,6 +93,8 @@ Daily.co Transport → Deepgram STT → TranscriptCollector
 | JobQueue | job_queue | Background job tracking |
 
 **Interview status lifecycle**: `invited` → `started` → `in_progress` → `completed`
+
+**User lifecycle**: Active (deactivated_at=NULL) / Deactivated (soft delete)
 
 ## External Service Integrations
 
@@ -150,7 +160,7 @@ SECRET_KEY=<32+ char random string>
 
 ```bash
 BASE_URL=https://boswell.example.com  # For email links
-ADMIN_EMAILS=admin@example.com        # Comma-separated
+INITIAL_ADMIN_EMAIL=admin@example.com # Bootstrap first admin during migration
 DAILY_DOMAIN=emirbot                  # Daily.co subdomain
 DEBUG=true                            # Debug mode
 SQL_ECHO=true                         # Log SQL queries
@@ -164,10 +174,11 @@ Initialize with: `boswell init`
 ## Development Commands
 
 ```bash
-# Local development
-docker-compose up -d postgres
-uv run python -m boswell.server.main    # Start web server
-uv run python -m boswell.server.worker  # Start voice worker
+# Start web server
+uv run python -m boswell.server.main
+
+# Start voice worker
+uv run python -m boswell.server.worker
 
 # Build room-ui
 cd room-ui && npm install && npm run build
