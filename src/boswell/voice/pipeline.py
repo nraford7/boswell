@@ -5,6 +5,7 @@ import os
 from typing import Any, Callable
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 
 logger = logging.getLogger(__name__)
 from pipecat.frames.frames import EndFrame, TTSSpeakFrame
@@ -19,7 +20,6 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 from boswell.config import load_config
 from boswell.voice.transcript import BotResponseCollector, TranscriptCollector
-from boswell.voice.acknowledgment import AcknowledgmentProcessor
 from boswell.voice.bracket_buffer import BracketBufferProcessor
 from boswell.voice.mode_detection import ModeDetectionProcessor
 from boswell.voice.speed_control import SpeedControlProcessor
@@ -85,7 +85,9 @@ async def create_pipeline(
             audio_out_enabled=True,
             transcription_enabled=False,  # We use Deepgram directly
             vad_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=SileroVADAnalyzer(
+                params=VADParams(stop_secs=0.8)
+            ),
             vad_audio_passthrough=True,  # Required for audio output to work
         ),
     )
@@ -145,9 +147,6 @@ async def create_pipeline(
     transcript_collector = TranscriptCollector(guest_name=guest_name)
     bot_response_collector = BotResponseCollector(transcript_collector)
 
-    # Set up immediate acknowledgment for reduced perceived latency
-    acknowledgment_processor = AcknowledgmentProcessor()
-
     # Set up strike control (processes [STRIKE] tags from LLM)
     strike_control_processor = StrikeControlProcessor(transcript_collector)
 
@@ -172,12 +171,11 @@ async def create_pipeline(
     # speaking_state_processor = SpeakingStateProcessor()
 
     # Build the pipeline
-    # Audio flows: transport.input -> stt -> transcript -> ack -> context -> llm -> strike -> speed -> bot_collector -> tts -> [DIAGNOSTICS] -> output
+    # Audio flows: transport.input -> stt -> transcript -> context -> llm -> strike -> speed -> bot_collector -> tts -> [DIAGNOSTICS] -> output
     pipeline_processors = [
         transport.input(),
         stt,
         transcript_collector,  # Capture guest speech after STT
-        acknowledgment_processor,  # Immediate filler acknowledgment
         context_aggregator.user(),
         llm,
         bracket_buffer_processor,  # Reassemble split bracket tags into whole tokens

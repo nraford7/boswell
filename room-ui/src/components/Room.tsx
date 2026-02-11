@@ -12,6 +12,7 @@ type CountdownState = '3' | '2' | '1' | 'dots' | 'fading' | 'done'
 
 interface DisplayQuestion {
   text: string
+  summary?: string
 }
 
 function normalizeQuestionSentence(text: string): string {
@@ -66,7 +67,7 @@ export function Room({ thankYouUrl }: RoomProps) {
   useEffect(() => {
     if (!daily) return
 
-    const transitionToQuestion = (nextQuestion: string) => {
+    const transitionToQuestion = (nextQuestion: string, summary?: string) => {
       if (questionChangeTimer.current) {
         clearTimeout(questionChangeTimer.current)
         questionChangeTimer.current = null
@@ -76,7 +77,7 @@ export function Room({ thankYouUrl }: RoomProps) {
 
       if (!currentQuestionRef.current) {
         currentQuestionRef.current = nextQuestion
-        setCurrentQuestion({ text: nextQuestion })
+        setCurrentQuestion({ text: nextQuestion, summary })
         setQuestionVisible(false)
         // Ensure CSS transition runs after mount.
         rafIdRef.current = requestAnimationFrame(() => {
@@ -89,7 +90,7 @@ export function Room({ thankYouUrl }: RoomProps) {
       setQuestionVisible(false)
       questionChangeTimer.current = setTimeout(() => {
         currentQuestionRef.current = nextQuestion
-        setCurrentQuestion({ text: nextQuestion })
+        setCurrentQuestion({ text: nextQuestion, summary })
         setQuestionVisible(true)
         questionChangeTimer.current = null
       }, 200)
@@ -109,7 +110,11 @@ export function Room({ thankYouUrl }: RoomProps) {
       const normalizedQuestion = normalizeQuestionSentence(rawQuestion)
       if (!normalizedQuestion) return
 
-      transitionToQuestion(normalizedQuestion)
+      const summary = typeof payload.summary === 'string'
+        ? normalizeQuestionSentence(payload.summary)
+        : undefined
+
+      transitionToQuestion(normalizedQuestion, summary)
     }
 
     daily.on('app-message', handleAppMessage)
@@ -169,14 +174,18 @@ export function Room({ thankYouUrl }: RoomProps) {
           className={`current-question ${
             questionVisible ? 'current-question-visible' : 'current-question-hidden'
           } ${
-            currentQuestion.text.length > 140
-              ? 'current-question-long'
-              : currentQuestion.text.length > 100
-                ? 'current-question-medium'
-                : ''
+            currentQuestion.text.length > 200
+              ? 'current-question-xlong'
+              : currentQuestion.text.length > 140
+                ? 'current-question-long'
+                : currentQuestion.text.length > 100
+                  ? 'current-question-medium'
+                  : ''
           }`}
         >
-          {currentQuestion.text}
+          {currentQuestion.text.length > 250 && currentQuestion.summary
+            ? currentQuestion.summary
+            : currentQuestion.text}
         </div>
       )}
       <Controls />

@@ -457,6 +457,8 @@
   transform: translate(-50%, -50%);
   width: min(92vw, 1320px);
   max-width: 92vw;
+  max-height: 80vh;
+  overflow: hidden;
   color: var(--accent);
   font-family: var(--font-display);
   font-size: clamp(1.5rem, 3.6vw, 2.8rem);
@@ -487,6 +489,11 @@
 .current-question-long {
   font-size: clamp(1.2rem, 2.6vw, 2rem);
   line-height: 1.25;
+}
+
+.current-question-xlong {
+  font-size: clamp(1rem, 2.2vw, 1.6rem);
+  line-height: 1.3;
 }
 
 @media (max-width: 900px) {
